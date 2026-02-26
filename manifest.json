@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Stepper 3.0 - Step-by-Step Guide Assistant",
+  "version": "1.0.0",
+  "description": "Internal step-by-step guide assistant for IT agents",
+  "icons": {
+    "16": "src/assets/icon16.png",
+    "48": "src/assets/icon48.png",
+    "128": "src/assets/icon128.png"
+  },
+  "action": {
+    "default_popup": "src/ui/popup.html",
+    "default_icon": {
+      "16": "src/assets/icon16.png",
+      "48": "src/assets/icon48.png",
+      "128": "src/assets/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/service_worker.js"
+  },
+  "options_page": "src/ui/options.html",
+  "permissions": [
+    "storage"
+  ],
+  "optional_permissions": [
+    "activeTab"
+  ]
+}
