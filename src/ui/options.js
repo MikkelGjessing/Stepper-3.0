@@ -19,6 +19,11 @@ const clearStorageBtn = document.getElementById('clearStorageBtn');
 const addDemoArticlesBtn = document.getElementById('addDemoArticlesBtn');
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
+const importArticleBtn = document.getElementById('importArticleBtn');
+const clearUploadedArticlesBtn = document.getElementById('clearUploadedArticlesBtn');
+const articleFileInput = document.getElementById('articleFile');
+const uploadStatus = document.getElementById('uploadStatus');
+const uploadedArticlesCount = document.getElementById('uploadedArticlesCount');
 
 // Form field IDs
 const formFields = {
@@ -35,6 +40,7 @@ const formFields = {
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('Options page loaded');
   await loadSettings();
+  await updateUploadedArticlesCount();
   setupEventListeners();
 });
 
@@ -63,6 +69,10 @@ function setupEventListeners() {
   clearStorageBtn.addEventListener('click', handleClearStorage);
   exportBtn.addEventListener('click', handleExport);
   importBtn.addEventListener('click', handleImport);
+  
+  // Upload article actions
+  importArticleBtn.addEventListener('click', handleImportArticle);
+  clearUploadedArticlesBtn.addEventListener('click', handleClearUploadedArticles);
 }
 
 // Load settings from storage
@@ -396,4 +406,96 @@ function showStatus(message, type = 'info') {
   setTimeout(() => {
     statusMessage.style.display = 'none';
   }, 5000);
+}
+
+// Handle import article
+async function handleImportArticle() {
+  const file = articleFileInput.files[0];
+  
+  if (!file) {
+    showUploadStatus('Please select a file to import', 'error');
+    return;
+  }
+  
+  try {
+    importArticleBtn.disabled = true;
+    importArticleBtn.textContent = '⏳ Importing...';
+    
+    const result = await Articles.importArticleFile(file);
+    
+    if (result.success) {
+      showUploadStatus(result.message, 'success');
+      articleFileInput.value = ''; // Clear file input
+      await updateUploadedArticlesCount();
+    } else {
+      showUploadStatus(result.message, 'error');
+    }
+    
+  } catch (error) {
+    console.error('Error importing article:', error);
+    showUploadStatus('Failed to import article: ' + error.message, 'error');
+  } finally {
+    importArticleBtn.disabled = false;
+    importArticleBtn.textContent = '📥 Import';
+  }
+}
+
+// Handle clear uploaded articles
+async function handleClearUploadedArticles() {
+  const confirmed = confirm(
+    'This will delete all uploaded articles. This cannot be undone. Continue?'
+  );
+  
+  if (!confirmed) return;
+  
+  try {
+    clearUploadedArticlesBtn.disabled = true;
+    clearUploadedArticlesBtn.textContent = '⏳ Clearing...';
+    
+    const result = await Articles.clearUploadedArticles();
+    
+    if (result.success) {
+      showUploadStatus(result.message, 'success');
+      await updateUploadedArticlesCount();
+    } else {
+      showUploadStatus(result.message, 'error');
+    }
+    
+  } catch (error) {
+    console.error('Error clearing uploaded articles:', error);
+    showUploadStatus('Failed to clear uploaded articles: ' + error.message, 'error');
+  } finally {
+    clearUploadedArticlesBtn.disabled = false;
+    clearUploadedArticlesBtn.textContent = '🗑️ Clear Uploaded Articles';
+  }
+}
+
+// Show upload status message
+function showUploadStatus(message, type = 'info') {
+  uploadStatus.textContent = message;
+  uploadStatus.className = `upload-status ${type}`;
+  uploadStatus.style.color = type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#666';
+  uploadStatus.style.fontWeight = '500';
+  
+  // Auto-hide after 5 seconds
+  setTimeout(() => {
+    uploadStatus.textContent = '';
+  }, 5000);
+}
+
+// Update uploaded articles count
+async function updateUploadedArticlesCount() {
+  try {
+    const count = await Articles.getUploadedArticlesCount();
+    if (count > 0) {
+      uploadedArticlesCount.textContent = `📊 ${count} uploaded article${count === 1 ? '' : 's'}`;
+      uploadedArticlesCount.style.fontWeight = '500';
+    } else {
+      uploadedArticlesCount.textContent = 'No uploaded articles';
+      uploadedArticlesCount.style.fontWeight = 'normal';
+    }
+  } catch (error) {
+    console.error('Error updating uploaded articles count:', error);
+    uploadedArticlesCount.textContent = '';
+  }
 }
