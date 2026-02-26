@@ -1209,24 +1209,33 @@ const Articles = {
         const stepTitle = h2.textContent.trim();
         const stepContent = this.getContentUntilNextHeading(h2);
         
-        // Extract images from step content
+        // Extract and sanitize images from step content
         const images = [];
         const imgElements = stepContent.querySelectorAll('img');
         imgElements.forEach(img => {
           const src = img.getAttribute('src') || '';
           const alt = img.getAttribute('alt') || '';
-          if (src) {
+          const sanitizedSrc = this.sanitizeImageUrl(src);
+          if (sanitizedSrc) {
             images.push({
               alt: alt,
-              dataUrlOrRemoteUrl: src
+              dataUrlOrRemoteUrl: sanitizedSrc
             });
+            // Update the img tag with sanitized URL
+            img.setAttribute('src', sanitizedSrc);
+          } else {
+            // Remove invalid image
+            img.remove();
           }
         });
+        
+        // Sanitize the HTML content by removing scripts and dangerous attributes
+        const sanitizedContent = this.sanitizeHtmlContent(stepContent);
         
         steps.push({
           index: index + 1,
           title: stepTitle,
-          bodyHtml: stepContent.innerHTML,
+          bodyHtml: sanitizedContent.innerHTML,
           images: images
         });
       });
@@ -1249,6 +1258,60 @@ const Articles = {
   },
 
   /**
+   * Sanitize HTML content to remove dangerous elements and attributes
+   * @param {Element} element - DOM element to sanitize
+   * @returns {Element} Sanitized element
+   */
+  sanitizeHtmlContent(element) {
+    // Remove script tags
+    element.querySelectorAll('script').forEach(el => el.remove());
+    
+    // Remove event handler attributes and dangerous URLs
+    element.querySelectorAll('*').forEach(el => {
+      Array.from(el.attributes).forEach(attr => {
+        // Remove event handlers
+        if (attr.name.startsWith('on')) {
+          el.removeAttribute(attr.name);
+        }
+        // Remove javascript: URLs
+        if ((attr.name === 'href' || attr.name === 'src') && 
+            attr.value.toLowerCase().includes('javascript:')) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+    
+    return element;
+  },
+
+  /**
+   * Escape HTML entities to prevent XSS
+   * @param {string} text - Text to escape
+   * @returns {string} Escaped text
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  },
+
+  /**
+   * Validate and sanitize image URL
+   * @param {string} url - Image URL
+   * @returns {string|null} Sanitized URL or null if invalid
+   */
+  sanitizeImageUrl(url) {
+    // Only allow data URLs with image MIME types, http, and https
+    if (url.startsWith('data:image/')) {
+      return url;
+    }
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    return null;
+  },
+
+  /**
    * Convert markdown to HTML (simple implementation)
    * @param {string} markdown - Markdown content
    * @returns {string} HTML content
@@ -1259,25 +1322,39 @@ const Articles = {
     // Handle images: ![alt](url) or <img src="...">
     // Keep data URLs and remote URLs, warn about local files
     html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
-      if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
-        return `<img src="${url}" alt="${alt}" style="max-width: 100%; margin: 10px 0;" />`;
+      const sanitizedUrl = this.sanitizeImageUrl(url);
+      if (sanitizedUrl) {
+        const escapedAlt = this.escapeHtml(alt);
+        const escapedUrl = this.escapeHtml(sanitizedUrl);
+        return `<img src="${escapedUrl}" alt="${escapedAlt}" style="max-width: 100%; margin: 10px 0;" />`;
       } else {
         // Local file reference - show warning placeholder
         console.warn(`Local image file cannot be imported: ${url}`);
-        return `<p><em>[Image placeholder: ${url} - Local images must be embedded as data URLs]</em></p>`;
+        const escapedUrl = this.escapeHtml(url);
+        return `<p><em>[Image placeholder: ${escapedUrl} - Local images must be embedded as data URLs]</em></p>`;
       }
     });
     
-    // Bold: **text** or __text__
-    html = html.replace(/\*\*([^\*]+)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    // Bold: **text** or __text__ (process first, they're longer)
+    html = html.replace(/\*\*(.+?)\*\*/g, (match, text) => {
+      return `<strong>${this.escapeHtml(text)}</strong>`;
+    });
+    html = html.replace(/__(.+?)__/g, (match, text) => {
+      return `<strong>${this.escapeHtml(text)}</strong>`;
+    });
     
-    // Italic: *text* or _text_
-    html = html.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
-    html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+    // Italic: *text* or _text_ (process after bold)
+    html = html.replace(/\*(.+?)\*/g, (match, text) => {
+      return `<em>${this.escapeHtml(text)}</em>`;
+    });
+    html = html.replace(/_(.+?)_/g, (match, text) => {
+      return `<em>${this.escapeHtml(text)}</em>`;
+    });
     
     // Code: `code`
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = html.replace(/`([^`]+)`/g, (match, code) => {
+      return `<code>${this.escapeHtml(code)}</code>`;
+    });
     
     // Lists (simple)
     const listLines = html.split('\n');
@@ -1297,8 +1374,11 @@ const Articles = {
           processedLines.push('</ul>');
           inList = false;
         }
-        if (trimmed) {
+        // Only wrap in <p> if not already containing HTML block tags
+        if (trimmed && !trimmed.match(/^<(p|div|ul|ol|img|h\d)/)) {
           processedLines.push(`<p>${trimmed}</p>`);
+        } else if (trimmed) {
+          processedLines.push(trimmed);
         }
       }
     }
