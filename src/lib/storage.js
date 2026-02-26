@@ -102,7 +102,8 @@ const Storage = {
         enableDummyArticles: true,
         enableLLMSearch: false,
         llmEndpoint: '',
-        llmApiKey: ''
+        llmApiKey: '',
+        llmModel: 'gpt-3.5-turbo'
       };
     } catch (error) {
       console.error('Error getting settings:', error);
@@ -114,7 +115,8 @@ const Storage = {
         enableDummyArticles: true,
         enableLLMSearch: false,
         llmEndpoint: '',
-        llmApiKey: ''
+        llmApiKey: '',
+        llmModel: 'gpt-3.5-turbo'
       };
     }
   },
