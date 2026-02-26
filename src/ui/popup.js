@@ -19,7 +19,6 @@ const viewerContent = document.getElementById('viewerContent');
 const articleTitle = document.getElementById('articleTitle');
 const backBtn = document.getElementById('backBtn');
 const refreshBtn = document.getElementById('refreshBtn');
-const addDummyBtn = document.getElementById('addDummyBtn');
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -48,10 +47,6 @@ function setupEventListeners() {
   refreshBtn.addEventListener('click', async () => {
     await loadArticles();
     showNotification('Articles refreshed');
-  });
-  
-  addDummyBtn.addEventListener('click', async () => {
-    await addDummyArticles();
   });
 }
 
@@ -186,27 +181,6 @@ function clearArticleView() {
   document.querySelectorAll('.result-item').forEach(item => {
     item.classList.remove('active');
   });
-}
-
-// Add dummy articles
-async function addDummyArticles() {
-  try {
-    const settings = await Storage.getSettings();
-    
-    if (!settings.enableDummyArticles) {
-      showNotification('Dummy articles are disabled in settings');
-      return;
-    }
-    
-    const created = await Articles.createDummyArticles();
-    console.log('Created dummy articles:', created.length);
-    
-    await loadArticles();
-    showNotification(`Added ${created.length} demo articles`);
-  } catch (error) {
-    console.error('Error adding dummy articles:', error);
-    showError('Failed to add demo articles');
-  }
 }
 
 // Show notification
