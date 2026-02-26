@@ -396,3 +396,466 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #999;
 }
+
+/* Step Guide Styles */
+
+/* Progress Bar */
+.progress-container {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.progress-text {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.progress-percentage {
+  font-weight: 600;
+  color: #667eea;
+  font-size: 14px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  transition: width 0.3s ease;
+}
+
+/* Current Step */
+.current-step {
+  margin-bottom: 24px;
+}
+
+.step-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.step-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.step-completed-badge {
+  padding: 4px 12px;
+  background: #4caf50;
+  color: white;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.step-content {
+  line-height: 1.8;
+  color: #333;
+}
+
+.step-content p {
+  margin: 12px 0;
+}
+
+.step-content ul,
+.step-content ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.step-content li {
+  margin: 8px 0;
+}
+
+.step-images {
+  margin: 16px 0;
+}
+
+.step-images img {
+  max-width: 100%;
+  height: auto;
+  margin: 10px 0;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  display: block;
+}
+
+.image-alt-text {
+  padding: 16px;
+  background: #f0f4ff;
+  border: 1px solid #667eea;
+  border-radius: 8px;
+  color: #667eea;
+  text-align: center;
+  margin: 10px 0;
+}
+
+/* Navigation Buttons */
+.step-navigation {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.nav-btn {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.primary-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.primary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secondary-btn {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.secondary-btn:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+.secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Action Buttons */
+.step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.action-btn {
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  border-color: #667eea;
+  background: #f0f4ff;
+}
+
+.warning-btn {
+  border-color: #ff9800;
+  color: #ff9800;
+}
+
+.warning-btn:hover {
+  background: #fff3e0;
+  border-color: #ff9800;
+}
+
+/* Completion Summary */
+.completion-summary {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.completion-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.completion-summary h2 {
+  font-size: 28px;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.completion-summary p {
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.completion-summary h3 {
+  font-size: 20px;
+  color: #667eea;
+  margin-bottom: 24px;
+}
+
+.completion-stats {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin: 32px 0;
+  padding: 24px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 600;
+  color: #667eea;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.completed-steps-list {
+  text-align: left;
+  margin: 24px auto;
+  max-width: 400px;
+}
+
+.completed-steps-list h4 {
+  font-size: 16px;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.completed-steps-list ul {
+  list-style: none;
+  padding: 0;
+}
+
+.completed-steps-list li {
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  background: #f0f4ff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.completed-check {
+  color: #4caf50;
+  font-weight: 600;
+}
+
+.completion-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.completion-actions button {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: #333;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.steps-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-step-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.preview-step-item:hover {
+  background: #f0f4ff;
+  border-color: #667eea;
+}
+
+.preview-step-item.current {
+  background: #f0f4ff;
+  border-color: #667eea;
+}
+
+.preview-step-number {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 50%;
+  font-weight: 600;
+  color: #667eea;
+  flex-shrink: 0;
+}
+
+.preview-step-item.current .preview-step-number {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+.preview-step-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-step-title {
+  font-weight: 500;
+  color: #333;
+  flex: 1;
+}
+
+.current-badge {
+  padding: 2px 8px;
+  background: #667eea;
+  color: white;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.completed-badge-small {
+  padding: 2px 8px;
+  background: #4caf50;
+  color: white;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Error Message */
+.error-message {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.error-message h3 {
+  font-size: 24px;
+  color: #ff5722;
+  margin-bottom: 12px;
+}
+
+.error-message p {
+  color: #666;
+  margin-bottom: 24px;
+}
