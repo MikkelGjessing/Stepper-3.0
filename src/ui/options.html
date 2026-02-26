@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stepper 3.0 - Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Stepper 3.0 Settings</h1>
+      <p class="subtitle">Configure your step-by-step guide assistant</p>
+    </header>
+
+    <main class="content">
+      <form id="settingsForm">
+        <!-- Repository Source Section -->
+        <section class="settings-section">
+          <h2 class="section-title">📚 Repository Source</h2>
+          
+          <div class="form-group">
+            <label class="label">Source Type</label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="repoSourceType" value="url" id="sourceTypeUrl">
+                <span>URL Repository</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="repoSourceType" value="azure" id="sourceTypeAzure">
+                <span>Azure DevOps</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group" id="urlGroup">
+            <label class="label" for="repoUrl">Repository URL</label>
+            <input 
+              type="url" 
+              id="repoUrl" 
+              class="input" 
+              placeholder="https://example.com/articles"
+            />
+            <span class="help-text">URL to fetch article repository</span>
+          </div>
+
+          <div class="form-group" id="azureGroup" style="display: none;">
+            <label class="label" for="azureApiBaseUrl">Azure DevOps API Base URL</label>
+            <input 
+              type="url" 
+              id="azureApiBaseUrl" 
+              class="input" 
+              placeholder="https://dev.azure.com/organization"
+            />
+            <span class="help-text">Base URL for Azure DevOps API</span>
+          </div>
+
+          <div class="form-group" id="azurePatGroup" style="display: none;">
+            <label class="label" for="azurePat">Personal Access Token (PAT)</label>
+            <input 
+              type="password" 
+              id="azurePat" 
+              class="input" 
+              placeholder="Enter your Azure DevOps PAT"
+            />
+            <span class="help-text">Token for authentication with Azure DevOps</span>
+          </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="settings-section">
+          <h2 class="section-title">⚡ Features</h2>
+          
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="enableDummyArticles" class="checkbox">
+              <span>Enable Demo Articles</span>
+            </label>
+            <span class="help-text">Allow creation of dummy/demo articles for testing</span>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="enableLLMSearch" class="checkbox">
+              <span>Enable LLM-Powered Search</span>
+            </label>
+            <span class="help-text">Use AI/LLM for enhanced search capabilities</span>
+          </div>
+        </section>
+
+        <!-- LLM Configuration Section -->
+        <section class="settings-section" id="llmSection" style="display: none;">
+          <h2 class="section-title">🤖 LLM Configuration</h2>
+          
+          <div class="form-group">
+            <label class="label" for="llmEndpoint">LLM Endpoint</label>
+            <input 
+              type="url" 
+              id="llmEndpoint" 
+              class="input" 
+              placeholder="https://api.openai.com/v1/chat/completions"
+            />
+            <span class="help-text">API endpoint for LLM service</span>
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="llmApiKey">API Key</label>
+            <input 
+              type="password" 
+              id="llmApiKey" 
+              class="input" 
+              placeholder="Enter your LLM API key"
+            />
+            <span class="help-text">Authentication key for LLM service</span>
+          </div>
+        </section>
+
+        <!-- Actions Section -->
+        <section class="settings-section">
+          <h2 class="section-title">🔧 Advanced</h2>
+          
+          <div class="button-group">
+            <button type="button" class="btn btn-secondary" id="clearStorageBtn">
+              Clear All Data
+            </button>
+            <button type="button" class="btn btn-secondary" id="exportBtn">
+              Export Settings
+            </button>
+            <button type="button" class="btn btn-secondary" id="importBtn">
+              Import Settings
+            </button>
+          </div>
+          <span class="help-text">Warning: Clearing data cannot be undone</span>
+        </section>
+
+        <!-- Save/Cancel Buttons -->
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="saveBtn">
+            💾 Save Settings
+          </button>
+          <button type="button" class="btn btn-secondary" id="cancelBtn">
+            Cancel
+          </button>
+        </div>
+      </form>
+
+      <!-- Status Message -->
+      <div class="status-message" id="statusMessage" style="display: none;"></div>
+    </main>
+
+    <footer class="footer">
+      <p>Stepper 3.0 - Internal IT Agent Assistant</p>
+    </footer>
+  </div>
+
+  <script src="../lib/storage.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

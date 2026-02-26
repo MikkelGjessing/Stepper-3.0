@@ -1,0 +1,34 @@
+# Development files
+.DS_Store
+*.log
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Build artifacts (if any added in future)
+dist/
+build/
+
+# Node modules (if added in future)
+node_modules/
+
+# Package files (if added in future)
+package-lock.json
+yarn.lock
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+
+# Testing
+coverage/
+.nyc_output/

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stepper 3.0</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <h1 class="title">Stepper 3.0</h1>
+      <button class="settings-btn" id="settingsBtn" title="Settings">⚙️</button>
+    </header>
+
+    <!-- Search Input -->
+    <div class="search-section">
+      <div class="search-container">
+        <input 
+          type="text" 
+          id="searchInput" 
+          class="search-input" 
+          placeholder="Ask me anything or search for guides..."
+          autocomplete="off"
+        />
+        <button class="search-btn" id="searchBtn">🔍</button>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="content">
+      <!-- Results List Panel -->
+      <div class="results-panel" id="resultsPanel">
+        <div class="panel-header">
+          <h2>Search Results</h2>
+          <span class="result-count" id="resultCount">0 articles</span>
+        </div>
+        <div class="results-list" id="resultsList">
+          <div class="empty-state">
+            <p>👋 Welcome to Stepper 3.0!</p>
+            <p>Search for step-by-step guides to get started.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Article Viewer Panel -->
+      <div class="viewer-panel" id="viewerPanel">
+        <div class="viewer-header">
+          <button class="back-btn" id="backBtn">← Back</button>
+          <h2 id="articleTitle">Select an article</h2>
+        </div>
+        <div class="viewer-content" id="viewerContent">
+          <div class="empty-state">
+            <p>Select an article from the results to view its content</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <button class="footer-btn" id="refreshBtn">🔄 Refresh</button>
+      <button class="footer-btn" id="addDummyBtn">➕ Add Demo Articles</button>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="../lib/storage.js"></script>
+  <script src="../lib/articles.js"></script>
+  <script src="../lib/search.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
