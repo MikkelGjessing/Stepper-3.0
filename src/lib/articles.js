@@ -1481,6 +1481,211 @@ const Articles = {
       console.error('Error getting uploaded articles count:', error);
       return 0;
     }
+  },
+
+  /**
+   * Validate article object against schema
+   * @param {Object} article - Article to validate
+   * @returns {boolean} True if valid
+   */
+  validateArticle(article) {
+    // Check required fields
+    if (!article.title || typeof article.title !== 'string') {
+      return false;
+    }
+    
+    if (!Array.isArray(article.steps) || article.steps.length === 0) {
+      return false;
+    }
+    
+    // Validate each step
+    for (const step of article.steps) {
+      if (typeof step.index !== 'number' || 
+          typeof step.title !== 'string' || 
+          typeof step.bodyHtml !== 'string') {
+        return false;
+      }
+      
+      // Validate images array if present
+      if (step.images && !Array.isArray(step.images)) {
+        return false;
+      }
+    }
+    
+    return true;
+  },
+
+  /**
+   * Sync articles from repository
+   * @param {Object} settings - Settings object with repo configuration
+   * @returns {Promise<Object>} Result object with success status and message
+   */
+  async syncFromRepo(settings) {
+    try {
+      let articles = [];
+      
+      // Fetch articles based on source type
+      if (settings.repoSourceType === 'url' && settings.repoUrl) {
+        articles = await this.fetchFromUrl(settings.repoUrl);
+      } else if (settings.repoSourceType === 'azure' && settings.azureApiBaseUrl && settings.azurePat) {
+        articles = await this.fetchFromAzure(settings.azureApiBaseUrl, settings.azurePat);
+      } else {
+        return {
+          success: false,
+          message: 'Invalid repository configuration. Please check your settings.'
+        };
+      }
+      
+      if (!Array.isArray(articles) || articles.length === 0) {
+        return {
+          success: false,
+          message: 'No articles found in repository or invalid response format.'
+        };
+      }
+      
+      // Validate and process articles
+      const validArticles = [];
+      const errors = [];
+      
+      for (let i = 0; i < articles.length; i++) {
+        const article = articles[i];
+        
+        if (!this.validateArticle(article)) {
+          errors.push(`Article ${i + 1} failed validation`);
+          continue;
+        }
+        
+        // Ensure article has required metadata
+        const processedArticle = {
+          id: article.id || this.generateUUID(),
+          title: article.title,
+          summary: article.summary || '',
+          tags: Array.isArray(article.tags) ? article.tags : [],
+          estimatedMinutes: article.estimatedMinutes || null,
+          steps: article.steps.map((step, index) => ({
+            index: step.index !== undefined ? step.index : index + 1,
+            title: step.title,
+            bodyHtml: step.bodyHtml,
+            images: Array.isArray(step.images) ? step.images.filter(img => {
+              // Validate image URLs
+              return img.dataUrlOrRemoteUrl && this.sanitizeImageUrl(img.dataUrlOrRemoteUrl);
+            }) : []
+          })),
+          source: 'repo',
+          createdAt: article.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        validArticles.push(processedArticle);
+      }
+      
+      if (validArticles.length === 0) {
+        return {
+          success: false,
+          message: `Failed to sync: ${errors.length > 0 ? errors.join('; ') : 'No valid articles found'}`
+        };
+      }
+      
+      // Upsert articles (update existing or insert new based on ID)
+      const existingArticles = await Storage.getArticles();
+      const repoArticleIds = new Set(validArticles.map(a => a.id));
+      
+      // Remove old repo articles that are not in the new sync
+      const nonRepoArticles = existingArticles.filter(a => a.source !== 'repo');
+      
+      // Combine non-repo articles with new repo articles
+      const updatedArticles = [...nonRepoArticles, ...validArticles];
+      
+      await Storage.setArticles(updatedArticles);
+      
+      const message = `Successfully synced ${validArticles.length} article(s) from repository${errors.length > 0 ? `. ${errors.length} article(s) skipped due to validation errors.` : '.'}`;
+      
+      return {
+        success: true,
+        count: validArticles.length,
+        errors: errors.length,
+        message
+      };
+      
+    } catch (error) {
+      console.error('Error syncing from repository:', error);
+      return {
+        success: false,
+        message: `Sync failed: ${error.message}`
+      };
+    }
+  },
+
+  /**
+   * Fetch articles from URL repository
+   * @param {string} url - Repository URL
+   * @returns {Promise<Array>} Array of articles
+   */
+  async fetchFromUrl(url) {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Handle both direct array and wrapped responses
+      return Array.isArray(data) ? data : (data.articles || []);
+      
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error('Network error: Unable to connect to repository. Please check your internet connection and URL.');
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch articles from Azure DevOps
+   * @param {string} baseUrl - Azure API base URL
+   * @param {string} pat - Personal Access Token
+   * @returns {Promise<Array>} Array of articles
+   */
+  async fetchFromAzure(baseUrl, pat) {
+    try {
+      // Create Basic auth header
+      const authHeader = 'Basic ' + btoa(':' + pat);
+      
+      const response = await fetch(baseUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': authHeader
+        }
+      });
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Authentication failed: Invalid Personal Access Token');
+        } else if (response.status === 404) {
+          throw new Error('Resource not found: Please check your Azure API URL');
+        }
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Handle both direct array and wrapped responses
+      return Array.isArray(data) ? data : (data.articles || []);
+      
+    } catch (error) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error('Network error: Unable to connect to Azure DevOps. Please check your internet connection and URL.');
+      }
+      throw error;
+    }
   }
 };
 
