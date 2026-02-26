@@ -36,7 +36,8 @@ const formFields = {
   enableDummyArticles: document.getElementById('enableDummyArticles'),
   enableLLMSearch: document.getElementById('enableLLMSearch'),
   llmEndpoint: document.getElementById('llmEndpoint'),
-  llmApiKey: document.getElementById('llmApiKey')
+  llmApiKey: document.getElementById('llmApiKey'),
+  llmModel: document.getElementById('llmModel')
 };
 
 // Initialize on load
@@ -104,6 +105,7 @@ async function loadSettings() {
     formFields.enableLLMSearch.checked = settings.enableLLMSearch === true;
     formFields.llmEndpoint.value = settings.llmEndpoint || '';
     formFields.llmApiKey.value = settings.llmApiKey || '';
+    formFields.llmModel.value = settings.llmModel || 'gpt-3.5-turbo';
     
     toggleLLMSection();
     
@@ -153,7 +155,8 @@ async function handleSaveSettings(event) {
       enableDummyArticles: formFields.enableDummyArticles.checked,
       enableLLMSearch: formFields.enableLLMSearch.checked,
       llmEndpoint: formFields.llmEndpoint.value.trim(),
-      llmApiKey: formFields.llmApiKey.value.trim()
+      llmApiKey: formFields.llmApiKey.value.trim(),
+      llmModel: formFields.llmModel.value.trim() || 'gpt-3.5-turbo'
     };
     
     // Validate settings
@@ -206,7 +209,8 @@ async function handleResetToDefaults() {
       enableDummyArticles: true,
       enableLLMSearch: false,
       llmEndpoint: '',
-      llmApiKey: ''
+      llmApiKey: '',
+      llmModel: 'gpt-3.5-turbo'
     };
     
     const success = await Storage.setSettings(defaultSettings);

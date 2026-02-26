@@ -164,7 +164,7 @@ const Search = {
         const stepBody = this.stripHtml(step.bodyHtml || '').toLowerCase();
         if (stepBody.includes(query)) {
           score += 1;
-          // Count occurrences
+          // Count occurrences (escape special regex characters)
           const occurrences = (stepBody.match(new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
           score += Math.min(occurrences * 0.5, 3); // Cap bonus at 3
         }
@@ -239,7 +239,7 @@ Return only the JSON array, no other text.`;
           'Authorization': `Bearer ${settings.llmApiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
+          model: settings.llmModel || 'gpt-3.5-turbo',
           messages: [
             { role: 'user', content: prompt }
           ],
