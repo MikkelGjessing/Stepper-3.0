@@ -70,6 +70,14 @@ const Search = {
    * @returns {Array} Ranked search results
    */
   keywordSearch(query, articles) {
+    if (!query || !query.trim()) {
+      return [];
+    }
+    
+    if (!Array.isArray(articles) || articles.length === 0) {
+      return [];
+    }
+    
     const normalizedQuery = query.toLowerCase().trim();
     const queryTokens = this.tokenize(query);
     const results = [];
