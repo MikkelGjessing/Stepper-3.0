@@ -23,6 +23,7 @@ const refreshBtn = document.getElementById('refreshBtn');
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('Popup loaded');
+  await Articles.loadDummyArticlesIfNeeded();
   await loadArticles();
   setupEventListeners();
 });
@@ -53,7 +54,7 @@ function setupEventListeners() {
 // Load articles from storage
 async function loadArticles() {
   try {
-    currentArticles = await Storage.getArticles();
+    currentArticles = await Articles.getAllArticles(true);
     console.log('Loaded articles:', currentArticles.length);
     displayResults(currentArticles);
   } catch (error) {
@@ -91,17 +92,26 @@ function displayResults(articles) {
   
   resultCount.textContent = `${articles.length} article${articles.length !== 1 ? 's' : ''}`;
   
-  resultsList.innerHTML = articles.map(article => `
-    <div class="result-item" data-article-id="${article.id}">
-      <div class="result-item-title">${escapeHtml(article.title)}</div>
-      <div class="result-item-category">${escapeHtml(article.category || 'General')}</div>
-      ${article.tags && article.tags.length > 0 ? `
-        <div class="result-item-tags">
-          ${article.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+  resultsList.innerHTML = articles.map(article => {
+    const stepCount = article.steps && Array.isArray(article.steps) ? article.steps.length : 0;
+    return `
+      <div class="result-item" data-article-id="${article.id}">
+        <div class="result-item-title">${escapeHtml(article.title)}</div>
+        <div class="result-item-meta">
+          ${article.summary ? `<div class="result-item-summary">${escapeHtml(article.summary)}</div>` : ''}
+          <div class="result-item-info">
+            <span class="result-item-steps">${stepCount} step${stepCount !== 1 ? 's' : ''}</span>
+            ${article.estimatedMinutes ? `<span class="result-item-time">⏱ ${article.estimatedMinutes} min</span>` : ''}
+          </div>
         </div>
-      ` : ''}
-    </div>
-  `).join('');
+        ${article.tags && article.tags.length > 0 ? `
+          <div class="result-item-tags">
+            ${article.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
   
   // Add click handlers to result items
   document.querySelectorAll('.result-item').forEach(item => {
@@ -134,16 +144,25 @@ async function displayArticle(articleId) {
   // Display article content
   articleTitle.textContent = article.title;
   
-  // Parse steps if not already parsed
-  const steps = article.steps && article.steps.length > 0 
+  // Use the structured steps from article
+  const steps = article.steps && Array.isArray(article.steps) && article.steps.length > 0 
     ? article.steps 
-    : Articles.parseSteps(article.content);
+    : [];
   
   viewerContent.innerHTML = `
+    ${article.summary ? `
+      <div class="article-summary">
+        <p>${escapeHtml(article.summary)}</p>
+      </div>
+    ` : ''}
+    
     <div class="article-meta">
-      <span class="article-category">${escapeHtml(article.category || 'General')}</span>
-      ${article.metadata ? `
-        <span>Updated: ${new Date(article.metadata.updatedAt).toLocaleDateString()}</span>
+      ${article.estimatedMinutes ? `
+        <span>⏱ Estimated time: ${article.estimatedMinutes} minutes</span>
+      ` : ''}
+      <span>Steps: ${steps.length}</span>
+      ${article.updatedAt ? `
+        <span>Updated: ${new Date(article.updatedAt).toLocaleDateString()}</span>
       ` : ''}
     </div>
     
@@ -151,18 +170,16 @@ async function displayArticle(articleId) {
       <div class="article-steps">
         ${steps.map(step => `
           <div class="step-item">
-            <div class="step-number">Step ${step.number}: ${escapeHtml(step.title)}</div>
-            ${step.details && step.details.length > 0 ? `
-              <div class="step-details">
-                ${step.details.map(detail => `<p>${escapeHtml(detail)}</p>`).join('')}
-              </div>
-            ` : ''}
+            <div class="step-number">Step ${step.index}: ${escapeHtml(step.title)}</div>
+            <div class="step-body">
+              ${sanitizeHtml(step.bodyHtml)}
+            </div>
           </div>
         `).join('')}
       </div>
     ` : `
       <div class="article-content">
-        ${escapeHtml(article.content).split('\n').map(line => `<p>${line}</p>`).join('')}
+        <p>This article does not contain step-by-step instructions.</p>
       </div>
     `}
   `;
@@ -200,5 +217,38 @@ function showError(message) {
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
+  return div.innerHTML;
+}
+
+// Sanitize HTML content - allows only safe tags and removes scripts
+function sanitizeHtml(html) {
+  if (!html) return '';
+  
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  
+  // Remove all script tags
+  const scripts = div.querySelectorAll('script');
+  scripts.forEach(script => script.remove());
+  
+  // Remove event handlers
+  const allElements = div.querySelectorAll('*');
+  allElements.forEach(el => {
+    // Remove all event handler attributes
+    Array.from(el.attributes).forEach(attr => {
+      if (attr.name.startsWith('on')) {
+        el.removeAttribute(attr.name);
+      }
+    });
+    
+    // Remove javascript: URLs
+    if (el.hasAttribute('href') && el.getAttribute('href').toLowerCase().includes('javascript:')) {
+      el.removeAttribute('href');
+    }
+    if (el.hasAttribute('src') && el.getAttribute('src').toLowerCase().includes('javascript:')) {
+      el.removeAttribute('src');
+    }
+  });
+  
   return div.innerHTML;
 }
