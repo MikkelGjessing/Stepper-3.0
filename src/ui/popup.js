@@ -64,25 +64,26 @@ function setupEventListeners() {
   });
 }
 
-// Load settings from storage
+/**
+ * Load settings from storage on startup
+ * This ensures settings are loaded before articles are retrieved,
+ * allowing Articles.getAllArticles() to properly filter based on settings
+ */
 async function loadSettings() {
   try {
-    const settings = await Storage.getSettings();
+    await Storage.getSettings();
     // Note: Not logging settings to avoid exposing secrets like PAT and API keys
-    // Settings are loaded here to ensure they're cached before Articles.getAllArticles() is called
     // Articles.getAllArticles() internally calls Storage.getSettings() to respect enableDummyArticles
   } catch (error) {
     console.error('Error loading settings:', error);
   }
 }
 
-// Setup storage change listener
+/**
+ * Setup storage change listener to react to settings and article changes
+ * Automatically refreshes the article list when changes are detected
+ */
 function setupStorageListener() {
-  // Unsubscribe if already subscribed
-  if (storageChangeUnsubscribe) {
-    storageChangeUnsubscribe();
-  }
-  
   // Subscribe to storage changes
   storageChangeUnsubscribe = Storage.onChanged(async (changes, areaName) => {
     // React to settings changes
