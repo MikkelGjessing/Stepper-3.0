@@ -10,7 +10,6 @@ const sourceTypeAzure = document.getElementById('sourceTypeAzure');
 const urlGroup = document.getElementById('urlGroup');
 const azureGroup = document.getElementById('azureGroup');
 const azurePatGroup = document.getElementById('azurePatGroup');
-const enableLLMSearch = document.getElementById('enableLLMSearch');
 const llmSection = document.getElementById('llmSection');
 const statusMessage = document.getElementById('statusMessage');
 const saveBtn = document.getElementById('saveBtn');
@@ -25,6 +24,7 @@ const formFields = {
   azureApiBaseUrl: document.getElementById('azureApiBaseUrl'),
   azurePat: document.getElementById('azurePat'),
   enableDummyArticles: document.getElementById('enableDummyArticles'),
+  enableLLMSearch: document.getElementById('enableLLMSearch'),
   llmEndpoint: document.getElementById('llmEndpoint'),
   llmApiKey: document.getElementById('llmApiKey')
 };
@@ -43,7 +43,7 @@ function setupEventListeners() {
   sourceTypeAzure.addEventListener('change', toggleSourceType);
   
   // LLM toggle
-  enableLLMSearch.addEventListener('change', toggleLLMSection);
+  formFields.enableLLMSearch.addEventListener('change', toggleLLMSection);
   
   // Form submission
   settingsForm.addEventListener('submit', handleSaveSettings);
@@ -107,7 +107,7 @@ function toggleSourceType() {
 
 // Toggle LLM section
 function toggleLLMSection() {
-  if (enableLLMSearch.checked) {
+  if (formFields.enableLLMSearch.checked) {
     llmSection.style.display = 'block';
   } else {
     llmSection.style.display = 'none';
