@@ -315,8 +315,8 @@ function renderStepView() {
   const completionState = getCompletionState(article.id);
   const isCompleted = completionState.completedAt;
   
-  // If all steps completed, show summary
-  if (isCompleted && currentStepIndex >= totalSteps - 1) {
+  // If all steps completed and viewing the summary, show completion summary
+  if (isCompleted && currentStepIndex >= totalSteps - 1 && completionState.completedStepIndexes.length === totalSteps) {
     renderCompletionSummary();
     return;
   }
@@ -352,16 +352,26 @@ function renderStepView() {
         
         ${currentStep.images && currentStep.images.length > 0 ? `
           <div class="step-images">
-            ${currentStep.images.map(img => `
-              <img 
-                src="${escapeHtml(img.dataUrlOrRemoteUrl)}" 
-                alt="${escapeHtml(img.alt || 'Step image')}"
-                onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
-              />
-              <div class="image-alt-text" style="display: none;">
-                📷 ${escapeHtml(img.alt || 'Image not available')}
-              </div>
-            `).join('')}
+            ${currentStep.images.map(img => {
+              // Validate image URL - only allow data: URLs and https/http URLs
+              const url = img.dataUrlOrRemoteUrl || '';
+              const isValidUrl = url.startsWith('data:image/') || url.startsWith('https://') || url.startsWith('http://');
+              
+              if (!isValidUrl) {
+                return `<div class="image-alt-text">📷 ${escapeHtml(img.alt || 'Invalid image URL')}</div>`;
+              }
+              
+              return `
+                <img 
+                  src="${escapeHtml(url)}" 
+                  alt="${escapeHtml(img.alt || 'Step image')}"
+                  onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+                />
+                <div class="image-alt-text" style="display: none;">
+                  📷 ${escapeHtml(img.alt || 'Image not available')}
+                </div>
+              `;
+            }).join('')}
           </div>
         ` : ''}
       </div>
@@ -588,7 +598,7 @@ function showPreviewAllSteps() {
   // Add click handlers to step items
   document.querySelectorAll('.preview-step-item').forEach(item => {
     item.addEventListener('click', () => {
-      const stepIndex = parseInt(item.getAttribute('data-step-index'));
+      const stepIndex = parseInt(item.getAttribute('data-step-index'), 10);
       currentStepIndex = stepIndex;
       modal.remove();
       renderStepView();
