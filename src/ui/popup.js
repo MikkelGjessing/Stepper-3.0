@@ -289,9 +289,15 @@ async function displayArticle(articleId) {
       <div class="error-message">
         <h3>⚠️ No Steps Available</h3>
         <p>This article does not contain any step-by-step instructions.</p>
-        <button class="primary-btn" onclick="clearArticleView()">← Back to Search</button>
+        <button class="primary-btn" id="backToSearchBtn">← Back to Search</button>
       </div>
     `;
+    
+    const backToSearchBtn = document.getElementById('backToSearchBtn');
+    if (backToSearchBtn) {
+      backToSearchBtn.addEventListener('click', clearArticleView);
+    }
+    
     return;
   }
   
