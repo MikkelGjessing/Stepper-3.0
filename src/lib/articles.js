@@ -1363,19 +1363,7 @@ const Articles = {
    * @returns {string} Processed HTML
    */
   processInlineMarkdown(text) {
-    // Track positions of HTML tags we've created
-    const htmlMarkers = [];
     let result = text;
-    
-    // Helper to replace and track position
-    const replaceAndMark = (pattern, replacer) => {
-      result = result.replace(pattern, (match, ...args) => {
-        const offset = args[args.length - 2];
-        const replacement = replacer(match, ...args);
-        htmlMarkers.push({ start: offset, end: offset + match.length, newLength: replacement.length });
-        return replacement;
-      });
-    };
     
     // Handle images: ![alt](url)
     result = result.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
