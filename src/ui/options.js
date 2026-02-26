@@ -24,6 +24,9 @@ const clearUploadedArticlesBtn = document.getElementById('clearUploadedArticlesB
 const articleFileInput = document.getElementById('articleFile');
 const uploadStatus = document.getElementById('uploadStatus');
 const uploadedArticlesCount = document.getElementById('uploadedArticlesCount');
+const syncRepoBtn = document.getElementById('syncRepoBtn');
+const syncStatus = document.getElementById('syncStatus');
+const repoArticlesCount = document.getElementById('repoArticlesCount');
 
 // Form field IDs
 const formFields = {
@@ -41,6 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('Options page loaded');
   await loadSettings();
   await updateUploadedArticlesCount();
+  await updateRepoArticlesCount();
   setupEventListeners();
 });
 
@@ -73,6 +77,9 @@ function setupEventListeners() {
   // Upload article actions
   importArticleBtn.addEventListener('click', handleImportArticle);
   clearUploadedArticlesBtn.addEventListener('click', handleClearUploadedArticles);
+  
+  // Sync repository
+  syncRepoBtn.addEventListener('click', handleSyncRepo);
 }
 
 // Load settings from storage
@@ -498,4 +505,81 @@ async function updateUploadedArticlesCount() {
     console.error('Error updating uploaded articles count:', error);
     uploadedArticlesCount.textContent = '';
   }
+}
+
+// Update repo articles count
+async function updateRepoArticlesCount() {
+  try {
+    const articles = await Storage.getArticles();
+    const repoArticles = articles.filter(a => a.source === 'repo');
+    const count = repoArticles.length;
+    
+    if (count > 0) {
+      repoArticlesCount.textContent = `📊 ${count} repo article${count === 1 ? '' : 's'} synced`;
+      repoArticlesCount.style.fontWeight = '500';
+    } else {
+      repoArticlesCount.textContent = 'No repo articles synced yet';
+      repoArticlesCount.style.fontWeight = 'normal';
+    }
+  } catch (error) {
+    console.error('Error updating repo articles count:', error);
+    repoArticlesCount.textContent = '';
+  }
+}
+
+// Handle sync repository
+async function handleSyncRepo() {
+  try {
+    // Get current settings
+    const settings = await Storage.getSettings();
+    
+    // Validate configuration
+    if (settings.repoSourceType === 'url' && !settings.repoUrl) {
+      showSyncStatus('Please configure and save Repository URL before syncing', 'error');
+      return;
+    }
+    
+    if (settings.repoSourceType === 'azure' && (!settings.azureApiBaseUrl || !settings.azurePat)) {
+      showSyncStatus('Please configure and save Azure API settings before syncing', 'error');
+      return;
+    }
+    
+    // Disable button and show progress
+    syncRepoBtn.disabled = true;
+    syncRepoBtn.textContent = '⏳ Syncing...';
+    showSyncStatus('Syncing articles from repository...', 'info');
+    
+    // Send message to service worker to perform sync
+    const response = await chrome.runtime.sendMessage({
+      type: 'SYNC_REPO',
+      settings: settings
+    });
+    
+    if (response && response.success) {
+      showSyncStatus(response.message, 'success');
+      await updateRepoArticlesCount();
+    } else {
+      showSyncStatus(response.message || 'Sync failed', 'error');
+    }
+    
+  } catch (error) {
+    console.error('Error syncing repository:', error);
+    showSyncStatus('Failed to sync: ' + error.message, 'error');
+  } finally {
+    syncRepoBtn.disabled = false;
+    syncRepoBtn.textContent = '🔄 Sync Now';
+  }
+}
+
+// Show sync status message
+function showSyncStatus(message, type = 'info') {
+  syncStatus.textContent = message;
+  syncStatus.className = `sync-status ${type}`;
+  syncStatus.style.color = type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#666';
+  syncStatus.style.fontWeight = '500';
+  
+  // Auto-hide after 8 seconds (longer for sync messages)
+  setTimeout(() => {
+    syncStatus.textContent = '';
+  }, 8000);
 }

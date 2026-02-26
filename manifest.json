@@ -25,5 +25,9 @@
   ],
   "optional_permissions": [
     "activeTab"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
   ]
 }
