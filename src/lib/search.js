@@ -5,6 +5,17 @@
 
 const Search = {
   /**
+   * Strip HTML tags from text
+   * @param {string} html - HTML string
+   * @returns {string} Plain text
+   */
+  stripHtml(html) {
+    if (!html) return '';
+    // Remove HTML tags but keep text content
+    return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  },
+
+  /**
    * Search articles by query
    * @param {string} query - Search query
    * @param {Array} articles - Articles to search
@@ -82,7 +93,8 @@ const Search = {
           score += 2;
         }
         
-        const stepBody = (step.bodyHtml || '').toLowerCase();
+        // Strip HTML tags before searching in body content
+        const stepBody = this.stripHtml(step.bodyHtml || '').toLowerCase();
         if (stepBody.includes(query)) {
           score += 1;
           // Count occurrences

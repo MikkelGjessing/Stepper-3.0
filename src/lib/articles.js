@@ -26,10 +26,29 @@
 
 const Articles = {
   /**
-   * Generate UUID v4
+   * Generate UUID v4 using crypto API for better randomness
    * @returns {string} UUID
    */
   generateUUID() {
+    // Use crypto.randomUUID if available (modern browsers)
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    
+    // Fallback to crypto.getRandomValues
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      
+      // Set version (4) and variant bits
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      
+      const hexArray = Array.from(bytes, byte => byte.toString(16).padStart(2, '0'));
+      return `${hexArray.slice(0, 4).join('')}-${hexArray.slice(4, 6).join('')}-${hexArray.slice(6, 8).join('')}-${hexArray.slice(8, 10).join('')}-${hexArray.slice(10).join('')}`;
+    }
+    
+    // Fallback for older environments (less secure)
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       const r = Math.random() * 16 | 0;
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -169,15 +188,15 @@ const Articles = {
 
   /**
    * Load dummy articles if enabled in settings and not already loaded
-   * @returns {Promise<void>}
+   * @returns {Promise<Object>} Status object indicating what happened
    */
   async loadDummyArticlesIfNeeded() {
     try {
       const settings = await Storage.getSettings();
       
       if (!settings.enableDummyArticles) {
-        console.log('Dummy articles disabled');
-        return;
+        console.log('Dummy articles disabled in settings');
+        return { loaded: false, reason: 'disabled' };
       }
       
       const articles = await Storage.getArticles();
@@ -185,7 +204,7 @@ const Articles = {
       
       if (hasDummyArticles) {
         console.log('Dummy articles already loaded');
-        return;
+        return { loaded: false, reason: 'already-loaded' };
       }
       
       console.log('Loading dummy articles...');
@@ -196,8 +215,10 @@ const Articles = {
       }
       
       console.log(`Loaded ${dummyArticles.length} dummy articles`);
+      return { loaded: true, count: dummyArticles.length };
     } catch (error) {
       console.error('Error loading dummy articles:', error);
+      return { loaded: false, reason: 'error', error };
     }
   },
 

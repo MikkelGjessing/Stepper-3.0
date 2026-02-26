@@ -172,14 +172,14 @@ async function displayArticle(articleId) {
           <div class="step-item">
             <div class="step-number">Step ${step.index}: ${escapeHtml(step.title)}</div>
             <div class="step-body">
-              ${step.bodyHtml}
+              ${sanitizeHtml(step.bodyHtml)}
             </div>
           </div>
         `).join('')}
       </div>
     ` : `
       <div class="article-content">
-        <p>No steps available for this article.</p>
+        <p>This article does not contain step-by-step instructions.</p>
       </div>
     `}
   `;
@@ -217,5 +217,38 @@ function showError(message) {
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
+  return div.innerHTML;
+}
+
+// Sanitize HTML content - allows only safe tags and removes scripts
+function sanitizeHtml(html) {
+  if (!html) return '';
+  
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  
+  // Remove all script tags
+  const scripts = div.querySelectorAll('script');
+  scripts.forEach(script => script.remove());
+  
+  // Remove event handlers
+  const allElements = div.querySelectorAll('*');
+  allElements.forEach(el => {
+    // Remove all event handler attributes
+    Array.from(el.attributes).forEach(attr => {
+      if (attr.name.startsWith('on')) {
+        el.removeAttribute(attr.name);
+      }
+    });
+    
+    // Remove javascript: URLs
+    if (el.hasAttribute('href') && el.getAttribute('href').toLowerCase().includes('javascript:')) {
+      el.removeAttribute('href');
+    }
+    if (el.hasAttribute('src') && el.getAttribute('src').toLowerCase().includes('javascript:')) {
+      el.removeAttribute('src');
+    }
+  });
+  
   return div.innerHTML;
 }
