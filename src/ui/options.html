@@ -115,6 +115,34 @@
           </div>
         </section>
 
+        <!-- Upload Articles Section -->
+        <section class="settings-section">
+          <h2 class="section-title">📤 Upload Articles</h2>
+          
+          <div class="form-group">
+            <label class="label" for="articleFile">Select Article File</label>
+            <input 
+              type="file" 
+              id="articleFile" 
+              class="input" 
+              accept=".md,.html,.txt,.json"
+            />
+            <span class="help-text">Supported formats: Markdown (.md), HTML (.html), Text (.txt), JSON (.json)</span>
+          </div>
+          
+          <div class="button-group">
+            <button type="button" class="btn btn-primary" id="importArticleBtn">
+              📥 Import
+            </button>
+            <button type="button" class="btn btn-secondary" id="clearUploadedArticlesBtn">
+              🗑️ Clear Uploaded Articles
+            </button>
+          </div>
+          
+          <div id="uploadStatus" style="margin-top: 10px;"></div>
+          <div id="uploadedArticlesCount" style="margin-top: 10px; color: #666;"></div>
+        </section>
+
         <!-- Actions Section -->
         <section class="settings-section">
           <h2 class="section-title">🔧 Advanced</h2>

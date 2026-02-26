@@ -969,6 +969,413 @@ const Articles = {
         ]
       }
     ];
+  },
+
+  /**
+   * Import article from file
+   * @param {File} file - File object (.md, .html, .txt, .json)
+   * @returns {Promise<Object>} Result object with success status and message
+   */
+  async importArticleFile(file) {
+    try {
+      const fileType = file.name.split('.').pop().toLowerCase();
+      const content = await file.text();
+      
+      let article;
+      
+      switch (fileType) {
+        case 'json':
+          article = this.parseJsonArticle(content);
+          break;
+        case 'md':
+        case 'txt':
+          article = this.parseMarkdownArticle(content);
+          break;
+        case 'html':
+          article = this.parseHtmlArticle(content);
+          break;
+        default:
+          return {
+            success: false,
+            message: `Unsupported file type: .${fileType}`
+          };
+      }
+      
+      if (!article) {
+        return {
+          success: false,
+          message: 'Failed to parse article content'
+        };
+      }
+      
+      // Ensure source is 'uploaded'
+      article.source = 'uploaded';
+      
+      // Upsert the article
+      const savedArticle = await this.upsertArticle(article);
+      
+      if (savedArticle) {
+        return {
+          success: true,
+          message: `Successfully imported: ${article.title}`,
+          article: savedArticle
+        };
+      } else {
+        return {
+          success: false,
+          message: 'Failed to save article'
+        };
+      }
+      
+    } catch (error) {
+      console.error('Error importing article:', error);
+      return {
+        success: false,
+        message: `Import error: ${error.message}`
+      };
+    }
+  },
+
+  /**
+   * Parse JSON article
+   * @param {string} content - JSON content
+   * @returns {Object|null} Parsed article
+   */
+  parseJsonArticle(content) {
+    try {
+      const data = JSON.parse(content);
+      
+      // Validate required fields
+      if (!data.title) {
+        throw new Error('JSON must contain a title field');
+      }
+      
+      return {
+        id: data.id || this.generateUUID(),
+        title: data.title,
+        summary: data.summary || '',
+        tags: Array.isArray(data.tags) ? data.tags : [],
+        estimatedMinutes: data.estimatedMinutes || null,
+        steps: Array.isArray(data.steps) ? data.steps : [],
+        source: 'uploaded',
+        createdAt: data.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error parsing JSON article:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Parse Markdown article
+   * Conventions: First line # Title, ## Step: ... creates steps
+   * @param {string} content - Markdown content
+   * @returns {Object|null} Parsed article
+   */
+  parseMarkdownArticle(content) {
+    try {
+      const lines = content.split('\n');
+      let title = '';
+      let summary = '';
+      const steps = [];
+      let currentStep = null;
+      let currentStepContent = [];
+      let inStepSection = false;
+      let warnings = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Parse title (first # heading)
+        if (!title && line.startsWith('# ')) {
+          title = line.substring(2).trim();
+          continue;
+        }
+        
+        // Parse step headings (## Step: ...)
+        if (line.match(/^##\s+Step:/i)) {
+          // Save previous step if exists
+          if (currentStep && currentStepContent.length > 0) {
+            currentStep.bodyHtml = this.markdownToHtml(currentStepContent.join('\n'));
+            steps.push(currentStep);
+          }
+          
+          // Start new step
+          const stepTitle = line.substring(2).replace(/^Step:\s*/i, '').trim();
+          currentStep = {
+            index: steps.length + 1,
+            title: stepTitle,
+            bodyHtml: '',
+            images: []
+          };
+          currentStepContent = [];
+          inStepSection = true;
+          continue;
+        }
+        
+        // Handle other ## headings as steps
+        if (line.startsWith('## ')) {
+          // Save previous step if exists
+          if (currentStep && currentStepContent.length > 0) {
+            currentStep.bodyHtml = this.markdownToHtml(currentStepContent.join('\n'));
+            steps.push(currentStep);
+          }
+          
+          // Start new step
+          const stepTitle = line.substring(3).trim();
+          currentStep = {
+            index: steps.length + 1,
+            title: stepTitle,
+            bodyHtml: '',
+            images: []
+          };
+          currentStepContent = [];
+          inStepSection = true;
+          continue;
+        }
+        
+        // Collect content
+        if (inStepSection && currentStep) {
+          currentStepContent.push(line);
+        } else if (!inStepSection && title && line) {
+          // Content before first step becomes summary
+          if (!summary) {
+            summary = line;
+          }
+        }
+      }
+      
+      // Save last step
+      if (currentStep && currentStepContent.length > 0) {
+        currentStep.bodyHtml = this.markdownToHtml(currentStepContent.join('\n'));
+        steps.push(currentStep);
+      }
+      
+      if (!title) {
+        throw new Error('Markdown must contain a # Title heading');
+      }
+      
+      return {
+        id: this.generateUUID(),
+        title: title,
+        summary: summary,
+        tags: [],
+        estimatedMinutes: null,
+        steps: steps,
+        source: 'uploaded',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error parsing Markdown article:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Parse HTML article
+   * Conventions: <h1> as title, <h2> sections as steps
+   * @param {string} content - HTML content
+   * @returns {Object|null} Parsed article
+   */
+  parseHtmlArticle(content) {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(content, 'text/html');
+      
+      // Get title from <h1>
+      const h1 = doc.querySelector('h1');
+      if (!h1) {
+        throw new Error('HTML must contain an <h1> element for the title');
+      }
+      const title = h1.textContent.trim();
+      
+      // Get summary from first paragraph before first h2
+      let summary = '';
+      const firstP = doc.querySelector('p');
+      if (firstP) {
+        const firstH2 = doc.querySelector('h2');
+        if (!firstH2 || this.isBefore(firstP, firstH2)) {
+          summary = firstP.textContent.trim();
+        }
+      }
+      
+      // Parse steps from <h2> sections
+      const h2Elements = doc.querySelectorAll('h2');
+      const steps = [];
+      
+      h2Elements.forEach((h2, index) => {
+        const stepTitle = h2.textContent.trim();
+        const stepContent = this.getContentUntilNextHeading(h2);
+        
+        // Extract images from step content
+        const images = [];
+        const imgElements = stepContent.querySelectorAll('img');
+        imgElements.forEach(img => {
+          const src = img.getAttribute('src') || '';
+          const alt = img.getAttribute('alt') || '';
+          if (src) {
+            images.push({
+              alt: alt,
+              dataUrlOrRemoteUrl: src
+            });
+          }
+        });
+        
+        steps.push({
+          index: index + 1,
+          title: stepTitle,
+          bodyHtml: stepContent.innerHTML,
+          images: images
+        });
+      });
+      
+      return {
+        id: this.generateUUID(),
+        title: title,
+        summary: summary,
+        tags: [],
+        estimatedMinutes: null,
+        steps: steps,
+        source: 'uploaded',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error parsing HTML article:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Convert markdown to HTML (simple implementation)
+   * @param {string} markdown - Markdown content
+   * @returns {string} HTML content
+   */
+  markdownToHtml(markdown) {
+    let html = markdown;
+    
+    // Handle images: ![alt](url) or <img src="...">
+    // Keep data URLs and remote URLs, warn about local files
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
+      if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+        return `<img src="${url}" alt="${alt}" style="max-width: 100%; margin: 10px 0;" />`;
+      } else {
+        // Local file reference - show warning placeholder
+        console.warn(`Local image file cannot be imported: ${url}`);
+        return `<p><em>[Image placeholder: ${url} - Local images must be embedded as data URLs]</em></p>`;
+      }
+    });
+    
+    // Bold: **text** or __text__
+    html = html.replace(/\*\*([^\*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    
+    // Italic: *text* or _text_
+    html = html.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
+    html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+    
+    // Code: `code`
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Lists (simple)
+    const listLines = html.split('\n');
+    let inList = false;
+    const processedLines = [];
+    
+    for (let line of listLines) {
+      const trimmed = line.trim();
+      if (trimmed.match(/^[-*]\s+/)) {
+        if (!inList) {
+          processedLines.push('<ul>');
+          inList = true;
+        }
+        processedLines.push(`<li>${trimmed.substring(2)}</li>`);
+      } else {
+        if (inList) {
+          processedLines.push('</ul>');
+          inList = false;
+        }
+        if (trimmed) {
+          processedLines.push(`<p>${trimmed}</p>`);
+        }
+      }
+    }
+    
+    if (inList) {
+      processedLines.push('</ul>');
+    }
+    
+    return processedLines.join('\n');
+  },
+
+  /**
+   * Check if element1 appears before element2 in DOM
+   * @param {Element} el1 - First element
+   * @param {Element} el2 - Second element
+   * @returns {boolean} True if el1 comes before el2
+   */
+  isBefore(el1, el2) {
+    return !!(el2.compareDocumentPosition(el1) & Node.DOCUMENT_POSITION_PRECEDING);
+  },
+
+  /**
+   * Get content between current heading and next heading
+   * @param {Element} heading - Heading element
+   * @returns {Element} Div containing content
+   */
+  getContentUntilNextHeading(heading) {
+    const container = document.createElement('div');
+    let sibling = heading.nextElementSibling;
+    
+    while (sibling && !sibling.matches('h1, h2, h3, h4, h5, h6')) {
+      container.appendChild(sibling.cloneNode(true));
+      sibling = sibling.nextElementSibling;
+    }
+    
+    return container;
+  },
+
+  /**
+   * Clear all uploaded articles
+   * @returns {Promise<Object>} Result with count of deleted articles
+   */
+  async clearUploadedArticles() {
+    try {
+      const articles = await Storage.getArticles();
+      const uploadedArticles = articles.filter(a => a.source === 'uploaded');
+      const otherArticles = articles.filter(a => a.source !== 'uploaded');
+      
+      await Storage.setArticles(otherArticles);
+      
+      return {
+        success: true,
+        count: uploadedArticles.length,
+        message: `Deleted ${uploadedArticles.length} uploaded article(s)`
+      };
+    } catch (error) {
+      console.error('Error clearing uploaded articles:', error);
+      return {
+        success: false,
+        count: 0,
+        message: `Error: ${error.message}`
+      };
+    }
+  },
+
+  /**
+   * Get count of uploaded articles
+   * @returns {Promise<number>} Count of uploaded articles
+   */
+  async getUploadedArticlesCount() {
+    try {
+      const articles = await Storage.getArticles();
+      return articles.filter(a => a.source === 'uploaded').length;
+    } catch (error) {
+      console.error('Error getting uploaded articles count:', error);
+      return 0;
+    }
   }
 };
 
