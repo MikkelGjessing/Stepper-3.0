@@ -7,6 +7,7 @@
 let currentArticles = [];
 let currentSelectedArticle = null;
 let storageChangeUnsubscribe = null;
+let currentSettings = null;
 
 // DOM Elements
 const searchInput = document.getElementById('searchInput');
@@ -71,11 +72,12 @@ function setupEventListeners() {
  */
 async function loadSettings() {
   try {
-    await Storage.getSettings();
+    currentSettings = await Storage.getSettings();
     // Note: Not logging settings to avoid exposing secrets like PAT and API keys
     // Articles.getAllArticles() internally calls Storage.getSettings() to respect enableDummyArticles
   } catch (error) {
     console.error('Error loading settings:', error);
+    currentSettings = {};
   }
 }
 
@@ -89,6 +91,7 @@ function setupStorageListener() {
     // React to settings changes
     if (changes.settings) {
       console.log('Settings changed, refreshing articles');
+      currentSettings = await Storage.getSettings();
       await loadArticles();
     }
     
@@ -122,8 +125,17 @@ async function handleSearch() {
   }
   
   console.log('Searching for:', query);
-  const results = Search.search(query, currentArticles);
-  displayResults(results);
+  
+  try {
+    // Use the new searchArticles function with settings
+    const results = await Search.searchArticles(query, currentArticles, currentSettings);
+    displayResults(results);
+  } catch (error) {
+    console.error('Search error:', error);
+    // Fallback to keyword search on error
+    const results = Search.search(query, currentArticles);
+    displayResults(results);
+  }
 }
 
 // Display search results
