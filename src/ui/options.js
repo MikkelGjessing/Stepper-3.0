@@ -225,12 +225,10 @@ async function handleAddDemoArticles() {
     
     showStatus(`✓ Successfully added ${created.length} demo articles`, 'success');
     
-    addDemoArticlesBtn.disabled = false;
-    addDemoArticlesBtn.textContent = '➕ Add Demo Articles';
-    
   } catch (error) {
     console.error('Error adding demo articles:', error);
     showStatus('Failed to add demo articles: ' + error.message, 'error');
+  } finally {
     addDemoArticlesBtn.disabled = false;
     addDemoArticlesBtn.textContent = '➕ Add Demo Articles';
   }
