@@ -1317,77 +1317,114 @@ const Articles = {
    * @returns {string} HTML content
    */
   markdownToHtml(markdown) {
-    let html = markdown;
+    const lines = markdown.split('\n');
+    let inList = false;
+    const processedLines = [];
     
-    // Handle images: ![alt](url) or <img src="...">
-    // Keep data URLs and remote URLs, warn about local files
-    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
+    for (let line of lines) {
+      const trimmed = line.trim();
+      
+      // Handle list items
+      if (trimmed.match(/^[-*]\s+/)) {
+        if (!inList) {
+          processedLines.push('<ul>');
+          inList = true;
+        }
+        const content = this.processInlineMarkdown(trimmed.substring(2));
+        processedLines.push(`<li>${content}</li>`);
+        continue;
+      }
+      
+      // Close list if needed
+      if (inList) {
+        processedLines.push('</ul>');
+        inList = false;
+      }
+      
+      // Process line
+      if (trimmed) {
+        const processed = this.processInlineMarkdown(trimmed);
+        processedLines.push(`<p>${processed}</p>`);
+      }
+    }
+    
+    // Close list if still open
+    if (inList) {
+      processedLines.push('</ul>');
+    }
+    
+    return processedLines.join('\n');
+  },
+
+  /**
+   * Process inline markdown (bold, italic, code, images)
+   * Processes in order and escapes remaining text
+   * @param {string} text - Text to process
+   * @returns {string} Processed HTML
+   */
+  processInlineMarkdown(text) {
+    // Track positions of HTML tags we've created
+    const htmlMarkers = [];
+    let result = text;
+    
+    // Helper to replace and track position
+    const replaceAndMark = (pattern, replacer) => {
+      result = result.replace(pattern, (match, ...args) => {
+        const offset = args[args.length - 2];
+        const replacement = replacer(match, ...args);
+        htmlMarkers.push({ start: offset, end: offset + match.length, newLength: replacement.length });
+        return replacement;
+      });
+    };
+    
+    // Handle images: ![alt](url)
+    result = result.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
       const sanitizedUrl = this.sanitizeImageUrl(url);
       if (sanitizedUrl) {
         const escapedAlt = this.escapeHtml(alt);
         const escapedUrl = this.escapeHtml(sanitizedUrl);
         return `<img src="${escapedUrl}" alt="${escapedAlt}" style="max-width: 100%; margin: 10px 0;" />`;
       } else {
-        // Local file reference - show warning placeholder
         console.warn(`Local image file cannot be imported: ${url}`);
         const escapedUrl = this.escapeHtml(url);
-        return `<p><em>[Image placeholder: ${escapedUrl} - Local images must be embedded as data URLs]</em></p>`;
+        return `<em>[Image: ${escapedUrl} - must be data URL]</em>`;
       }
     });
     
-    // Bold: **text** or __text__ (process first, they're longer)
-    html = html.replace(/\*\*(.+?)\*\*/g, (match, text) => {
+    // Bold: **text** or __text__
+    result = result.replace(/\*\*([^\*]+)\*\*/g, (match, text) => {
       return `<strong>${this.escapeHtml(text)}</strong>`;
     });
-    html = html.replace(/__(.+?)__/g, (match, text) => {
+    result = result.replace(/__([^_]+)__/g, (match, text) => {
       return `<strong>${this.escapeHtml(text)}</strong>`;
     });
     
-    // Italic: *text* or _text_ (process after bold)
-    html = html.replace(/\*(.+?)\*/g, (match, text) => {
+    // Italic: *text* or _text_
+    result = result.replace(/\*([^\*]+)\*/g, (match, text) => {
       return `<em>${this.escapeHtml(text)}</em>`;
     });
-    html = html.replace(/_(.+?)_/g, (match, text) => {
+    result = result.replace(/_([^_]+)_/g, (match, text) => {
       return `<em>${this.escapeHtml(text)}</em>`;
     });
     
     // Code: `code`
-    html = html.replace(/`([^`]+)`/g, (match, code) => {
+    result = result.replace(/`([^`]+)`/g, (match, code) => {
       return `<code>${this.escapeHtml(code)}</code>`;
     });
     
-    // Lists (simple)
-    const listLines = html.split('\n');
-    let inList = false;
-    const processedLines = [];
-    
-    for (let line of listLines) {
-      const trimmed = line.trim();
-      if (trimmed.match(/^[-*]\s+/)) {
-        if (!inList) {
-          processedLines.push('<ul>');
-          inList = true;
-        }
-        processedLines.push(`<li>${trimmed.substring(2)}</li>`);
-      } else {
-        if (inList) {
-          processedLines.push('</ul>');
-          inList = false;
-        }
-        // Only wrap in <p> if not already containing HTML block tags
-        if (trimmed && !trimmed.match(/^<(p|div|ul|ol|img|h\d)/)) {
-          processedLines.push(`<p>${trimmed}</p>`);
-        } else if (trimmed) {
-          processedLines.push(trimmed);
-        }
+    // Now escape any remaining text that's not in HTML tags
+    // Split by HTML tags and escape text portions
+    const parts = result.split(/(<[^>]+>)/);
+    result = parts.map(part => {
+      // If it's an HTML tag, keep it
+      if (part.startsWith('<') && part.endsWith('>')) {
+        return part;
       }
-    }
+      // Otherwise, escape it
+      return this.escapeHtml(part);
+    }).join('');
     
-    if (inList) {
-      processedLines.push('</ul>');
-    }
-    
-    return processedLines.join('\n');
+    return result;
   },
 
   /**
