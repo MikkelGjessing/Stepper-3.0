@@ -15,6 +15,7 @@ const statusMessage = document.getElementById('statusMessage');
 const saveBtn = document.getElementById('saveBtn');
 const cancelBtn = document.getElementById('cancelBtn');
 const clearStorageBtn = document.getElementById('clearStorageBtn');
+const addDemoArticlesBtn = document.getElementById('addDemoArticlesBtn');
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
 
@@ -54,6 +55,7 @@ function setupEventListeners() {
   });
   
   // Advanced actions
+  addDemoArticlesBtn.addEventListener('click', handleAddDemoArticles);
   clearStorageBtn.addEventListener('click', handleClearStorage);
   exportBtn.addEventListener('click', handleExport);
   importBtn.addEventListener('click', handleImport);
@@ -203,6 +205,35 @@ function validateSettings(settings) {
   }
   
   return true;
+}
+
+// Handle add demo articles
+async function handleAddDemoArticles() {
+  try {
+    const settings = await Storage.getSettings();
+    
+    if (!settings.enableDummyArticles) {
+      showStatus('Demo articles are disabled. Please enable them in Features section first.', 'error');
+      return;
+    }
+    
+    addDemoArticlesBtn.disabled = true;
+    addDemoArticlesBtn.textContent = '⏳ Adding...';
+    
+    const created = await Articles.createDummyArticles();
+    console.log('Created demo articles:', created.length);
+    
+    showStatus(`✓ Successfully added ${created.length} demo articles`, 'success');
+    
+    addDemoArticlesBtn.disabled = false;
+    addDemoArticlesBtn.textContent = '➕ Add Demo Articles';
+    
+  } catch (error) {
+    console.error('Error adding demo articles:', error);
+    showStatus('Failed to add demo articles: ' + error.message, 'error');
+    addDemoArticlesBtn.disabled = false;
+    addDemoArticlesBtn.textContent = '➕ Add Demo Articles';
+  }
 }
 
 // Handle clear storage
