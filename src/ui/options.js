@@ -220,10 +220,13 @@ async function handleAddDemoArticles() {
     addDemoArticlesBtn.disabled = true;
     addDemoArticlesBtn.textContent = '⏳ Adding...';
     
-    const created = await Articles.createDummyArticles();
-    console.log('Created demo articles:', created.length);
+    await Articles.loadDummyArticlesIfNeeded();
+    const articles = await Articles.getAllArticles(false);
+    const dummyCount = articles.filter(a => a.source === 'dummy').length;
     
-    showStatus(`✓ Successfully added ${created.length} demo articles`, 'success');
+    console.log('Loaded demo articles:', dummyCount);
+    
+    showStatus(`✓ Successfully loaded ${dummyCount} demo articles`, 'success');
     
   } catch (error) {
     console.error('Error adding demo articles:', error);

@@ -59,10 +59,10 @@ const Search = {
       }
     }
     
-    // Category match
-    const category = (article.category || '').toLowerCase();
-    if (category.includes(query)) {
-      score += 5;
+    // Summary match
+    const summary = (article.summary || '').toLowerCase();
+    if (summary.includes(query)) {
+      score += 7;
     }
     
     // Tags match
@@ -74,13 +74,22 @@ const Search = {
       });
     }
     
-    // Content match (lower weight)
-    const content = (article.content || '').toLowerCase();
-    if (content.includes(query)) {
-      score += 2;
-      // Count occurrences
-      const occurrences = (content.match(new RegExp(query, 'g')) || []).length;
-      score += Math.min(occurrences, 5); // Cap bonus at 5
+    // Step titles and content match
+    if (Array.isArray(article.steps)) {
+      article.steps.forEach(step => {
+        const stepTitle = (step.title || '').toLowerCase();
+        if (stepTitle.includes(query)) {
+          score += 2;
+        }
+        
+        const stepBody = (step.bodyHtml || '').toLowerCase();
+        if (stepBody.includes(query)) {
+          score += 1;
+          // Count occurrences
+          const occurrences = (stepBody.match(new RegExp(query, 'g')) || []).length;
+          score += Math.min(occurrences * 0.5, 3); // Cap bonus at 3
+        }
+      });
     }
     
     // Tokenized query matching
@@ -89,7 +98,7 @@ const Search = {
       queryTokens.forEach(token => {
         if (token.length > 2) { // Ignore very short tokens
           if (title.includes(token)) score += 1;
-          if (content.includes(token)) score += 0.5;
+          if (summary.includes(token)) score += 0.5;
         }
       });
     }

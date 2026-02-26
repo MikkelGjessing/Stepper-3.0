@@ -160,6 +160,32 @@ body {
   color: #333;
 }
 
+.result-item-meta {
+  margin-bottom: 4px;
+}
+
+.result-item-summary {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.result-item-info {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #667eea;
+}
+
+.result-item-steps {
+  font-weight: 500;
+}
+
+.result-item-time {
+  color: #999;
+}
+
 .result-item-category {
   font-size: 11px;
   color: #667eea;
@@ -235,6 +261,20 @@ body {
   color: #666;
 }
 
+.article-summary {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f0f4ff;
+  border-left: 3px solid #667eea;
+  border-radius: 4px;
+}
+
+.article-summary p {
+  margin: 0;
+  color: #333;
+  line-height: 1.6;
+}
+
 .article-category {
   display: inline-block;
   padding: 4px 12px;
@@ -262,6 +302,33 @@ body {
   font-weight: 600;
   color: #667eea;
   margin-bottom: 8px;
+}
+
+.step-body {
+  margin-top: 8px;
+  color: #333;
+  line-height: 1.6;
+}
+
+.step-body p {
+  margin: 8px 0;
+}
+
+.step-body ul, .step-body ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.step-body li {
+  margin: 4px 0;
+}
+
+.step-body img {
+  max-width: 100%;
+  height: auto;
+  margin: 10px 0;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
 }
 
 .step-details {
