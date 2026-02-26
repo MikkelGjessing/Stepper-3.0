@@ -69,7 +69,8 @@ async function loadSettings() {
   try {
     const settings = await Storage.getSettings();
     // Note: Not logging settings to avoid exposing secrets like PAT and API keys
-    // Settings are now loaded and will be used by Articles.getAllArticles()
+    // Settings are loaded here to ensure they're cached before Articles.getAllArticles() is called
+    // Articles.getAllArticles() internally calls Storage.getSettings() to respect enableDummyArticles
   } catch (error) {
     console.error('Error loading settings:', error);
   }

@@ -197,9 +197,11 @@ async function handleResetToDefaults() {
     if (success) {
       showStatus('Settings reset to defaults successfully! ✓', 'success');
       
-      // Reload the form to show default values
-      setTimeout(() => {
-        location.reload();
+      // Reload the form to show default values without full page reload
+      setTimeout(async () => {
+        await loadSettings();
+        resetBtn.disabled = false;
+        resetBtn.textContent = '🔄 Reset to Defaults';
       }, 1500);
     } else {
       throw new Error('Failed to reset settings');
