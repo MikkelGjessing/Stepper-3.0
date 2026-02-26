@@ -5,6 +5,89 @@
 
 const Storage = {
   /**
+   * Get a value from storage
+   * @param {string} key - Storage key
+   * @param {*} defaultValue - Default value if key doesn't exist
+   * @returns {Promise<*>} Value from storage or default
+   */
+  async get(key, defaultValue) {
+    try {
+      const result = await chrome.storage.local.get(key);
+      return result[key] !== undefined ? result[key] : defaultValue;
+    } catch (error) {
+      console.error(`Error getting key "${key}":`, error);
+      return defaultValue;
+    }
+  },
+
+  /**
+   * Set a value in storage
+   * @param {string} key - Storage key
+   * @param {*} value - Value to store
+   * @returns {Promise<boolean>} Success status
+   */
+  async set(key, value) {
+    try {
+      await chrome.storage.local.set({ [key]: value });
+      return true;
+    } catch (error) {
+      console.error(`Error setting key "${key}":`, error);
+      return false;
+    }
+  },
+
+  /**
+   * Update a value in storage by shallow merging
+   * @param {string} key - Storage key
+   * @param {Object} patchObject - Object to merge with existing value
+   * @returns {Promise<boolean>} Success status
+   */
+  async update(key, patchObject) {
+    try {
+      const existing = await this.get(key, {});
+      const updated = { ...existing, ...patchObject };
+      return await this.set(key, updated);
+    } catch (error) {
+      console.error(`Error updating key "${key}":`, error);
+      return false;
+    }
+  },
+
+  /**
+   * Remove a value from storage
+   * @param {string} key - Storage key
+   * @returns {Promise<boolean>} Success status
+   */
+  async remove(key) {
+    try {
+      await chrome.storage.local.remove(key);
+      return true;
+    } catch (error) {
+      console.error(`Error removing key "${key}":`, error);
+      return false;
+    }
+  },
+
+  /**
+   * Subscribe to storage changes
+   * @param {Function} callback - Callback function (changes, areaName) => void
+   * @returns {Function} Unsubscribe function
+   */
+  onChanged(callback) {
+    const listener = (changes, areaName) => {
+      if (areaName === 'local') {
+        callback(changes, areaName);
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    
+    // Return unsubscribe function
+    return () => {
+      chrome.storage.onChanged.removeListener(listener);
+    };
+  },
+
+  /**
    * Get settings from storage
    * @returns {Promise<Object>} Settings object
    */

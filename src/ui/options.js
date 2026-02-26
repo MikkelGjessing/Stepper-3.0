@@ -13,6 +13,7 @@ const azurePatGroup = document.getElementById('azurePatGroup');
 const llmSection = document.getElementById('llmSection');
 const statusMessage = document.getElementById('statusMessage');
 const saveBtn = document.getElementById('saveBtn');
+const resetBtn = document.getElementById('resetBtn');
 const cancelBtn = document.getElementById('cancelBtn');
 const clearStorageBtn = document.getElementById('clearStorageBtn');
 const addDemoArticlesBtn = document.getElementById('addDemoArticlesBtn');
@@ -49,6 +50,9 @@ function setupEventListeners() {
   // Form submission
   settingsForm.addEventListener('submit', handleSaveSettings);
   
+  // Reset button
+  resetBtn.addEventListener('click', handleResetToDefaults);
+  
   // Cancel button
   cancelBtn.addEventListener('click', () => {
     window.close();
@@ -65,7 +69,7 @@ function setupEventListeners() {
 async function loadSettings() {
   try {
     const settings = await Storage.getSettings();
-    console.log('Loaded settings:', settings);
+    // Note: Not logging settings to avoid exposing secrets like PAT and API keys
     
     // Set source type
     if (settings.repoSourceType === 'azure') {
@@ -143,7 +147,7 @@ async function handleSaveSettings(event) {
     const success = await Storage.setSettings(settings);
     
     if (success) {
-      console.log('Settings saved successfully');
+      // Note: Not logging settings to avoid exposing secrets
       showStatus('Settings saved successfully! ✓', 'success');
       
       // Notify service worker of changes
@@ -162,6 +166,50 @@ async function handleSaveSettings(event) {
     showStatus('Failed to save settings: ' + error.message, 'error');
     saveBtn.disabled = false;
     saveBtn.textContent = '💾 Save Settings';
+  }
+}
+
+// Handle reset to defaults
+async function handleResetToDefaults() {
+  const confirmed = confirm(
+    'This will reset all settings to their default values. Continue?'
+  );
+  
+  if (!confirmed) return;
+  
+  try {
+    resetBtn.disabled = true;
+    resetBtn.textContent = '🔄 Resetting...';
+    
+    const defaultSettings = {
+      repoSourceType: 'url',
+      repoUrl: '',
+      azureApiBaseUrl: '',
+      azurePat: '',
+      enableDummyArticles: true,
+      enableLLMSearch: false,
+      llmEndpoint: '',
+      llmApiKey: ''
+    };
+    
+    const success = await Storage.setSettings(defaultSettings);
+    
+    if (success) {
+      showStatus('Settings reset to defaults successfully! ✓', 'success');
+      
+      // Reload the form to show default values
+      setTimeout(() => {
+        location.reload();
+      }, 1500);
+    } else {
+      throw new Error('Failed to reset settings');
+    }
+    
+  } catch (error) {
+    console.error('Error resetting settings:', error);
+    showStatus('Failed to reset settings: ' + error.message, 'error');
+    resetBtn.disabled = false;
+    resetBtn.textContent = '🔄 Reset to Defaults';
   }
 }
 

@@ -6,6 +6,7 @@
 // State management
 let currentArticles = [];
 let currentSelectedArticle = null;
+let storageChangeUnsubscribe = null;
 
 // DOM Elements
 const searchInput = document.getElementById('searchInput');
@@ -23,9 +24,21 @@ const refreshBtn = document.getElementById('refreshBtn');
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('Popup loaded');
+  
+  // Load settings first
+  await loadSettings();
+  
+  // Load dummy articles if needed
   await Articles.loadDummyArticlesIfNeeded();
+  
+  // Load articles
   await loadArticles();
+  
+  // Setup event listeners
   setupEventListeners();
+  
+  // Subscribe to storage changes
+  setupStorageListener();
 });
 
 // Setup event listeners
@@ -48,6 +61,40 @@ function setupEventListeners() {
   refreshBtn.addEventListener('click', async () => {
     await loadArticles();
     showNotification('Articles refreshed');
+  });
+}
+
+// Load settings from storage
+async function loadSettings() {
+  try {
+    const settings = await Storage.getSettings();
+    // Note: Not logging settings to avoid exposing secrets like PAT and API keys
+    // Settings are now loaded and will be used by Articles.getAllArticles()
+  } catch (error) {
+    console.error('Error loading settings:', error);
+  }
+}
+
+// Setup storage change listener
+function setupStorageListener() {
+  // Unsubscribe if already subscribed
+  if (storageChangeUnsubscribe) {
+    storageChangeUnsubscribe();
+  }
+  
+  // Subscribe to storage changes
+  storageChangeUnsubscribe = Storage.onChanged(async (changes, areaName) => {
+    // React to settings changes
+    if (changes.settings) {
+      console.log('Settings changed, refreshing articles');
+      await loadArticles();
+    }
+    
+    // React to articles changes
+    if (changes.articles) {
+      console.log('Articles changed, refreshing display');
+      await loadArticles();
+    }
   });
 }
 
