@@ -38,17 +38,19 @@
         </div>
       </div>
 
-      <!-- Results List -->
-      <div class="results-content">
+      <!-- Welcome Message (shown before first search) -->
+      <div id="welcomeMessage" class="welcome-message">
+        <p>👋 Welcome to Stepper 3.0!</p>
+        <p>Search for step-by-step guides to get started.</p>
+      </div>
+
+      <!-- Results List (shown after search) -->
+      <div class="results-content" id="resultsContent" style="display: none;">
         <div class="panel-header">
           <h2>Search Results</h2>
           <span class="result-count" id="resultCount">0 articles</span>
         </div>
         <div class="results-list" id="resultsList">
-          <div class="empty-state">
-            <p>👋 Welcome to Stepper 3.0!</p>
-            <p>Search for step-by-step guides to get started.</p>
-          </div>
         </div>
       </div>
     </div>
@@ -60,16 +62,7 @@
       </div>
     </div>
 
-    <!-- Preview View (All steps) -->
-    <div id="previewView" class="view-container" style="display: none;">
-      <div class="preview-header">
-        <button class="back-btn" id="previewBackBtn">← Back to Step</button>
-        <h2>All Steps Preview</h2>
-      </div>
-      <div class="preview-content" id="previewContent">
-        <!-- Preview steps will be dynamically inserted here -->
-      </div>
-    </div>
+
 
     <!-- Footer (Sticky) -->
     <footer class="footer">

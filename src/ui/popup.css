@@ -229,46 +229,134 @@ body {
   padding: 20px;
 }
 
-/* Preview View */
-#previewView {
-  display: flex;
-  flex-direction: column;
+/* Full Article View Styles */
+.article-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e0e0e0;
 }
 
-.preview-header {
+.article-header h2 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.article-completed-banner {
+  padding: 16px;
+  background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+  color: white;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.article-completed-banner h3 {
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+.article-completed-banner p {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.article-navigation {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.article-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.full-article-step {
+  padding: 20px;
+  background: #f8f9fa;
+  border-left: 4px solid #667eea;
+  border-radius: 8px;
+  position: relative;
+}
+
+.full-article-step.completed {
+  background: #f0f8f0;
+  border-left-color: #4caf50;
+  opacity: 0.8;
+}
+
+.full-article-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.full-article-step-title-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 20px;
-  border-bottom: 1px solid #e0e0e0;
-  background: white;
+  flex: 1;
 }
 
-.preview-header h2 {
-  font-size: 16px;
+.full-article-step-number {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #667eea;
+  color: white;
+  border-radius: 50%;
   font-weight: 600;
-  flex: 1;
-}
-
-.preview-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-.back-btn {
-  padding: 6px 12px;
-  background: #f0f0f0;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
   font-size: 14px;
-  transition: background 0.2s;
+  flex-shrink: 0;
 }
 
-.back-btn:hover {
-  background: #e0e0e0;
+.full-article-step.completed .full-article-step-number {
+  background: #4caf50;
 }
+
+.full-article-step-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.step-complete-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.full-article-step-body {
+  margin-left: 44px;
+  line-height: 1.8;
+  color: #333;
+}
+
+.full-article-step-body p {
+  margin: 12px 0;
+}
+
+.full-article-step-body ul,
+.full-article-step-body ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.full-article-step-body li {
+  margin: 8px 0;
+}
+
+
 
 /* Article Meta and Content */
 .article-meta {
@@ -355,6 +443,23 @@ body {
   margin-top: 8px;
   padding-left: 16px;
   color: #666;
+}
+
+/* Welcome Message */
+.welcome-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  text-align: center;
+  color: #999;
+  padding: 40px;
+}
+
+.welcome-message p {
+  margin-bottom: 8px;
+  font-size: 14px;
 }
 
 /* Empty State */
@@ -720,85 +825,7 @@ body {
   transition: all 0.2s;
 }
 
-/* Steps Preview List (for preview view) */
-.steps-preview-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 
-.preview-step-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 2px solid transparent;
-}
-
-.preview-step-item:hover {
-  background: #f0f4ff;
-  border-color: #667eea;
-}
-
-.preview-step-item.current {
-  background: #f0f4ff;
-  border-color: #667eea;
-}
-
-.preview-step-number {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: white;
-  border: 2px solid #e0e0e0;
-  border-radius: 50%;
-  font-weight: 600;
-  color: #667eea;
-  flex-shrink: 0;
-}
-
-.preview-step-item.current .preview-step-number {
-  background: #667eea;
-  color: white;
-  border-color: #667eea;
-}
-
-.preview-step-content {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.preview-step-title {
-  font-weight: 500;
-  color: #333;
-  flex: 1;
-}
-
-.current-badge {
-  padding: 2px 8px;
-  background: #667eea;
-  color: white;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.completed-badge-small {
-  padding: 2px 8px;
-  background: #4caf50;
-  color: white;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-}
 
 /* Error Message */
 .error-message {

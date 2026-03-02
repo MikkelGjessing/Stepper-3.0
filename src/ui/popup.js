@@ -6,8 +6,7 @@
 // UI State Machine
 const UI_STATE = {
   SEARCH: 'search',
-  ARTICLE: 'article',
-  PREVIEW: 'preview'
+  ARTICLE: 'article'
 };
 
 let currentUIState = UI_STATE.SEARCH;
@@ -17,8 +16,8 @@ let currentArticles = [];
 let currentSelectedArticle = null;
 let storageChangeUnsubscribe = null;
 let currentSettings = null;
-let currentStepIndex = 0;
 let articleCompletionStates = {}; // { articleId: { completedStepIndexes: [], completedAt?: string } }
+let hasSearched = false; // Track if user has performed a search
 
 // DOM Elements
 const searchInput = document.getElementById('searchInput');
@@ -27,11 +26,12 @@ const settingsBtn = document.getElementById('settingsBtn');
 const resultsList = document.getElementById('resultsList');
 const resultCount = document.getElementById('resultCount');
 const refreshBtn = document.getElementById('refreshBtn');
+const welcomeMessage = document.getElementById('welcomeMessage');
+const resultsContent = document.getElementById('resultsContent');
 
 // View containers
 const searchView = document.getElementById('searchView');
 const articleView = document.getElementById('articleView');
-const previewView = document.getElementById('previewView');
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -76,6 +76,21 @@ function setupEventListeners() {
 }
 
 /**
+ * Helper function to update search view visibility based on hasSearched state
+ */
+function updateSearchViewVisibility() {
+  if (welcomeMessage && resultsContent) {
+    if (hasSearched) {
+      welcomeMessage.style.display = 'none';
+      resultsContent.style.display = 'flex';
+    } else {
+      welcomeMessage.style.display = 'flex';
+      resultsContent.style.display = 'none';
+    }
+  }
+}
+
+/**
  * View State Machine - Controls which view is visible
  */
 function setView(state) {
@@ -85,7 +100,6 @@ function setView(state) {
   // Hide all views
   searchView.style.display = 'none';
   articleView.style.display = 'none';
-  previewView.style.display = 'none';
   
   // Show the requested view
   switch (state) {
@@ -93,22 +107,12 @@ function setView(state) {
       searchView.style.display = 'flex';
       // Clear article state
       currentSelectedArticle = null;
-      currentStepIndex = 0;
-      // Re-render search results if needed
-      if (currentArticles.length > 0) {
-        displayResults(currentArticles);
-      }
+      // Show/hide welcome message based on hasSearched
+      updateSearchViewVisibility();
       break;
       
     case UI_STATE.ARTICLE:
       articleView.style.display = 'flex';
-      // IMPORTANT: Clear search results DOM completely to prevent search results
-      // from being visible during step execution (requirement: hide search results during step execution)
-      resultsList.innerHTML = '';
-      break;
-      
-    case UI_STATE.PREVIEW:
-      previewView.style.display = 'flex';
       break;
   }
 }
@@ -234,12 +238,21 @@ async function loadArticles() {
 async function handleSearch() {
   const query = searchInput.value.trim();
   
+  // If query is empty, revert to pre-search state
   if (!query) {
-    displayResults(currentArticles);
+    hasSearched = false;
+    resultsList.innerHTML = '';
+    updateSearchViewVisibility();
     return;
   }
   
   console.log('Searching for:', query);
+  
+  // Mark that a search has been performed
+  hasSearched = true;
+  
+  // Show results container
+  updateSearchViewVisibility();
   
   try {
     // Use the new searchArticles function with settings
@@ -255,6 +268,11 @@ async function handleSearch() {
 
 // Display search results
 function displayResults(articles) {
+  // Only render results if a search has been performed
+  if (!hasSearched) {
+    return;
+  }
+  
   if (!articles || articles.length === 0) {
     resultsList.innerHTML = `
       <div class="empty-state">
@@ -308,7 +326,6 @@ async function displayArticle(articleId) {
   }
   
   currentSelectedArticle = article;
-  currentStepIndex = 0;
   
   // Check if article has steps
   const steps = article.steps && Array.isArray(article.steps) && article.steps.length > 0 
@@ -335,298 +352,187 @@ async function displayArticle(articleId) {
     return;
   }
   
-  // Switch to article view and render
+  // Switch to article view and render full article
   setView(UI_STATE.ARTICLE);
-  renderStepView();
+  renderFullArticleView();
 }
 
-// Render the current step view
-function renderStepView() {
+/**
+ * Helper function to check if all steps in an article are completed
+ */
+function areAllStepsCompleted(completionState, totalSteps) {
+  return completionState.completedStepIndexes.length === totalSteps;
+}
+
+// Render the full article view with all steps
+function renderFullArticleView() {
   if (!currentSelectedArticle) return;
   
   const article = currentSelectedArticle;
   const steps = article.steps;
   const totalSteps = steps.length;
   const completionState = getCompletionState(article.id);
-  const isCompleted = completionState.completedAt;
-  
-  // If all steps completed and viewing the summary, show completion summary
-  if (isCompleted && currentStepIndex >= totalSteps - 1 && completionState.completedStepIndexes.length === totalSteps) {
-    renderCompletionSummary();
-    return;
-  }
-  
-  const currentStep = steps[currentStepIndex];
-  const isStepCompleted = completionState.completedStepIndexes.includes(currentStepIndex);
-  const isFirstStep = currentStepIndex === 0;
-  const isLastStep = currentStepIndex === totalSteps - 1;
+  const isArticleCompleted = completionState.completedAt && areAllStepsCompleted(completionState, totalSteps);
   
   const articleContentScrollable = document.getElementById('articleContentScrollable');
-  articleContentScrollable.innerHTML = `
-    <!-- Progress Bar -->
-    <div class="progress-container">
-      <div class="progress-info">
-        <span class="progress-text">Step ${currentStepIndex + 1} of ${totalSteps}</span>
-        <span class="progress-percentage">${Math.round(((currentStepIndex + 1) / totalSteps) * 100)}%</span>
-      </div>
-      <div class="progress-bar">
-        <div class="progress-fill" style="width: ${((currentStepIndex + 1) / totalSteps) * 100}%"></div>
-      </div>
+  
+  // Build the article header
+  let headerHtml = `
+    <div class="article-header">
+      <h2>${escapeHtml(article.title)}</h2>
+      ${article.summary ? `<p style="color: #666; margin-top: 8px;">${escapeHtml(article.summary)}</p>` : ''}
     </div>
-    
-    <!-- Current Step -->
-    <div class="current-step">
-      <div class="step-header">
-        <h3 class="step-title">
-          ${isStepCompleted ? '✓ ' : ''}${escapeHtml(currentStep.title)}
-        </h3>
-        ${isStepCompleted ? '<span class="step-completed-badge">Completed</span>' : ''}
+  `;
+  
+  // If article is completed, show banner
+  if (isArticleCompleted) {
+    headerHtml += `
+      <div class="article-completed-banner">
+        <h3>✅ Article Completed!</h3>
+        <p>Completed on ${new Date(completionState.completedAt).toLocaleDateString()}</p>
       </div>
-      
-      <div class="step-content">
-        ${sanitizeHtml(currentStep.bodyHtml)}
-        
-        ${currentStep.images && currentStep.images.length > 0 ? `
-          <div class="step-images">
-            ${currentStep.images.map(img => {
-              // Validate image URL - only allow data: URLs and https/http URLs
-              const url = img.dataUrlOrRemoteUrl || '';
-              const isValidUrl = url.startsWith('data:image/') || url.startsWith('https://') || url.startsWith('http://');
-              
-              if (!isValidUrl) {
-                return `<div class="image-alt-text">📷 ${escapeHtml(img.alt || 'Invalid image URL')}</div>`;
-              }
-              
-              return `
-                <img 
-                  src="${escapeHtml(url)}" 
-                  alt="${escapeHtml(img.alt || 'Step image')}"
-                  onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
-                />
-                <div class="image-alt-text" style="display: none;">
-                  📷 ${escapeHtml(img.alt || 'Image not available')}
-                </div>
-              `;
-            }).join('')}
-          </div>
-        ` : ''}
-      </div>
-    </div>
-    
-    <!-- Navigation Buttons -->
-    <div class="step-navigation">
-      <button 
-        class="nav-btn secondary-btn" 
-        id="stepBackBtn" 
-        ${isFirstStep ? 'disabled' : ''}
-      >
-        ← Back
-      </button>
-      
-      <button 
-        class="nav-btn primary-btn" 
-        id="stepContinueBtn"
-      >
-        ${isLastStep ? 'Complete' : 'Continue →'}
-      </button>
-    </div>
-    
-    <!-- Action Buttons -->
-    <div class="step-actions">
-      <button class="action-btn" id="previewAllStepsBtn">📋 Preview all steps</button>
-      <button class="action-btn" id="searchNewArticleBtn">🔍 Search for new article</button>
+    `;
+  }
+  
+  // Navigation buttons
+  headerHtml += `
+    <div class="article-navigation">
+      <button class="secondary-btn" id="backToSearchBtn">← Back to Search</button>
       ${completionState.completedStepIndexes.length > 0 ? `
-        <button class="action-btn warning-btn" id="resetProgressBtn">🔄 Reset progress</button>
+        <button class="warning-btn" id="resetProgressBtn">🔄 Reset Progress</button>
       ` : ''}
     </div>
   `;
   
-  // Add event listeners
-  const stepBackBtn = document.getElementById('stepBackBtn');
-  const stepContinueBtn = document.getElementById('stepContinueBtn');
-  const previewAllStepsBtn = document.getElementById('previewAllStepsBtn');
-  const searchNewArticleBtn = document.getElementById('searchNewArticleBtn');
-  const resetProgressBtn = document.getElementById('resetProgressBtn');
+  // Render all steps
+  let stepsHtml = '<div class="article-steps-list">';
   
-  if (stepBackBtn) {
-    stepBackBtn.addEventListener('click', handleStepBack);
-  }
+  steps.forEach((step, index) => {
+    const isStepCompleted = completionState.completedStepIndexes.includes(index);
+    
+    stepsHtml += `
+      <div class="full-article-step ${isStepCompleted ? 'completed' : ''}" data-step-index="${index}">
+        <div class="full-article-step-header">
+          <div class="full-article-step-title-row">
+            <div class="full-article-step-number">${isStepCompleted ? '✓' : index + 1}</div>
+            <h3 class="full-article-step-title">${escapeHtml(step.title)}</h3>
+          </div>
+          <input 
+            type="checkbox" 
+            class="step-complete-checkbox" 
+            ${isStepCompleted ? 'checked' : ''}
+            data-step-index="${index}"
+            title="${isStepCompleted ? 'Mark as incomplete' : 'Mark as complete'}"
+          />
+        </div>
+        <div class="full-article-step-body">
+          ${sanitizeHtml(step.bodyHtml)}
+          
+          ${step.images && step.images.length > 0 ? `
+            <div class="step-images">
+              ${step.images.map(img => {
+                // Validate image URL - only allow data: URLs and https/http URLs
+                const url = img.dataUrlOrRemoteUrl || '';
+                const isValidUrl = url.startsWith('data:image/') || url.startsWith('https://') || url.startsWith('http://');
+                
+                if (!isValidUrl) {
+                  return `<div class="image-alt-text">📷 ${escapeHtml(img.alt || 'Invalid image URL')}</div>`;
+                }
+                
+                return `
+                  <img 
+                    src="${escapeHtml(url)}" 
+                    alt="${escapeHtml(img.alt || 'Step image')}"
+                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+                  />
+                  <div class="image-alt-text" style="display: none;">
+                    📷 ${escapeHtml(img.alt || 'Image not available')}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  });
   
-  if (stepContinueBtn) {
-    stepContinueBtn.addEventListener('click', handleStepContinue);
-  }
+  stepsHtml += '</div>';
   
-  if (previewAllStepsBtn) {
-    previewAllStepsBtn.addEventListener('click', showPreviewAllSteps);
-  }
+  // Combine everything
+  articleContentScrollable.innerHTML = headerHtml + stepsHtml;
   
-  if (searchNewArticleBtn) {
-    searchNewArticleBtn.addEventListener('click', () => {
+  // Add event listeners for navigation buttons
+  const backToSearchBtn = document.getElementById('backToSearchBtn');
+  if (backToSearchBtn) {
+    backToSearchBtn.addEventListener('click', () => {
       setView(UI_STATE.SEARCH);
       searchInput.focus();
     });
   }
   
+  const resetProgressBtn = document.getElementById('resetProgressBtn');
   if (resetProgressBtn) {
     resetProgressBtn.addEventListener('click', handleResetProgress);
   }
-}
-
-// Handle step back navigation
-function handleStepBack() {
-  if (currentStepIndex > 0) {
-    currentStepIndex--;
-    renderStepView();
-  }
-}
-
-// Handle step continue navigation
-async function handleStepContinue() {
-  const article = currentSelectedArticle;
-  const totalSteps = article.steps.length;
-  const isLastStep = currentStepIndex === totalSteps - 1;
   
-  // Mark current step as completed
-  await markStepCompleted(article.id, currentStepIndex);
-  
-  if (isLastStep) {
-    // Mark article as completed
-    await markArticleCompleted(article.id);
-    renderCompletionSummary();
-  } else {
-    // Move to next step
-    currentStepIndex++;
-    renderStepView();
-  }
-}
-
-// Render completion summary
-function renderCompletionSummary() {
-  const article = currentSelectedArticle;
-  const steps = article.steps;
-  const completionState = getCompletionState(article.id);
-  
-  const articleContentScrollable = document.getElementById('articleContentScrollable');
-  articleContentScrollable.innerHTML = `
-    <div class="completion-summary">
-      <div class="completion-icon">✅</div>
-      <h2>Congratulations!</h2>
-      <p>You've completed all steps for:</p>
-      <h3>${escapeHtml(article.title)}</h3>
-      
-      <div class="completion-stats">
-        <div class="stat">
-          <span class="stat-value">${steps.length}</span>
-          <span class="stat-label">Steps Completed</span>
-        </div>
-        ${article.estimatedMinutes ? `
-          <div class="stat">
-            <span class="stat-value">${article.estimatedMinutes}</span>
-            <span class="stat-label">Minutes</span>
-          </div>
-        ` : ''}
-        <div class="stat">
-          <span class="stat-value">${new Date(completionState.completedAt).toLocaleDateString()}</span>
-          <span class="stat-label">Completed On</span>
-        </div>
-      </div>
-      
-      <div class="completed-steps-list">
-        <h4>Completed Steps:</h4>
-        <ul>
-          ${steps.map((step, index) => `
-            <li>
-              <span class="completed-check">✓</span>
-              ${escapeHtml(step.title)}
-            </li>
-          `).join('')}
-        </ul>
-      </div>
-      
-      <div class="completion-actions">
-        <button class="primary-btn" id="reviewStepsBtn">📋 Review Steps</button>
-        <button class="secondary-btn" id="searchNewArticleBtn2">🔍 Search for new article</button>
-        <button class="warning-btn" id="resetProgressBtn2">🔄 Reset progress</button>
-      </div>
-    </div>
-  `;
-  
-  // Add event listeners
-  const reviewStepsBtn = document.getElementById('reviewStepsBtn');
-  const searchNewArticleBtn2 = document.getElementById('searchNewArticleBtn2');
-  const resetProgressBtn2 = document.getElementById('resetProgressBtn2');
-  
-  if (reviewStepsBtn) {
-    reviewStepsBtn.addEventListener('click', () => {
-      currentStepIndex = 0;
-      renderStepView();
-    });
-  }
-  
-  if (searchNewArticleBtn2) {
-    searchNewArticleBtn2.addEventListener('click', () => {
-      setView(UI_STATE.SEARCH);
-      searchInput.focus();
-    });
-  }
-  
-  if (resetProgressBtn2) {
-    resetProgressBtn2.addEventListener('click', handleResetProgress);
-  }
-}
-
-// Show preview all steps
-function showPreviewAllSteps() {
-  if (!currentSelectedArticle) return;
-  
-  const article = currentSelectedArticle;
-  const steps = article.steps;
-  const completionState = getCompletionState(article.id);
-  
-  // Switch to preview view
-  setView(UI_STATE.PREVIEW);
-  
-  // Render preview content
-  const previewContent = document.getElementById('previewContent');
-  previewContent.innerHTML = `
-    <div class="steps-preview-list">
-      ${steps.map((step, index) => {
-        const isCompleted = completionState.completedStepIndexes.includes(index);
-        const isCurrent = index === currentStepIndex;
-        return `
-          <div class="preview-step-item ${isCurrent ? 'current' : ''}" data-step-index="${index}">
-            <div class="preview-step-number">
-              ${isCompleted ? '✓' : index + 1}
-            </div>
-            <div class="preview-step-content">
-              <div class="preview-step-title">${escapeHtml(step.title)}</div>
-              ${isCurrent ? '<span class="current-badge">Current</span>' : ''}
-              ${isCompleted && !isCurrent ? '<span class="completed-badge-small">Completed</span>' : ''}
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>
-  `;
-  
-  // Add click handlers to step items
-  document.querySelectorAll('.preview-step-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const stepIndex = parseInt(item.getAttribute('data-step-index'), 10);
-      currentStepIndex = stepIndex;
-      setView(UI_STATE.ARTICLE);
-      renderStepView();
+  // Add event listeners for checkboxes
+  document.querySelectorAll('.step-complete-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', async (e) => {
+      const stepIndex = parseInt(e.target.getAttribute('data-step-index'), 10);
+      await handleStepCheckboxChange(stepIndex, e.target.checked);
     });
   });
+}
+
+// Handle step checkbox change
+async function handleStepCheckboxChange(stepIndex, isChecked) {
+  const article = currentSelectedArticle;
   
-  // Add back button handler
-  const previewBackBtn = document.getElementById('previewBackBtn');
-  if (previewBackBtn) {
-    previewBackBtn.addEventListener('click', () => {
-      setView(UI_STATE.ARTICLE);
-      renderStepView();
-    });
+  if (isChecked) {
+    // Mark step as completed
+    await markStepCompleted(article.id, stepIndex);
+  } else {
+    // Mark step as incomplete
+    await markStepIncomplete(article.id, stepIndex);
   }
+  
+  // Check if all steps are completed
+  const completionState = getCompletionState(article.id);
+  const totalSteps = article.steps.length;
+  
+  if (areAllStepsCompleted(completionState, totalSteps) && !completionState.completedAt) {
+    // Mark article as completed
+    await markArticleCompleted(article.id);
+  } else if (!areAllStepsCompleted(completionState, totalSteps) && completionState.completedAt) {
+    // Remove article completion if user unchecks a step
+    await removeArticleCompletion(article.id);
+  }
+  
+  // Re-render the view to update UI
+  renderFullArticleView();
+}
+
+// Mark a step as incomplete
+async function markStepIncomplete(articleId, stepIndex) {
+  if (!articleCompletionStates[articleId]) {
+    return;
+  }
+  
+  const state = articleCompletionStates[articleId];
+  state.completedStepIndexes = state.completedStepIndexes.filter(idx => idx !== stepIndex);
+  
+  await saveCompletionStates();
+}
+
+// Remove article completion status
+async function removeArticleCompletion(articleId) {
+  if (!articleCompletionStates[articleId]) {
+    return;
+  }
+  
+  delete articleCompletionStates[articleId].completedAt;
+  await saveCompletionStates();
 }
 
 // Handle reset progress
@@ -636,8 +542,7 @@ async function handleResetProgress() {
   const confirmed = confirm('Are you sure you want to reset your progress for this article?');
   if (confirmed) {
     await resetArticleProgress(currentSelectedArticle.id);
-    currentStepIndex = 0;
-    renderStepView();
+    renderFullArticleView();
   }
 }
 
