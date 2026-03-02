@@ -76,6 +76,21 @@ function setupEventListeners() {
 }
 
 /**
+ * Helper function to update search view visibility based on hasSearched state
+ */
+function updateSearchViewVisibility() {
+  if (welcomeMessage && resultsContent) {
+    if (hasSearched) {
+      welcomeMessage.style.display = 'none';
+      resultsContent.style.display = 'flex';
+    } else {
+      welcomeMessage.style.display = 'flex';
+      resultsContent.style.display = 'none';
+    }
+  }
+}
+
+/**
  * View State Machine - Controls which view is visible
  */
 function setView(state) {
@@ -93,15 +108,7 @@ function setView(state) {
       // Clear article state
       currentSelectedArticle = null;
       // Show/hide welcome message based on hasSearched
-      if (welcomeMessage && resultsContent) {
-        if (hasSearched) {
-          welcomeMessage.style.display = 'none';
-          resultsContent.style.display = 'flex';
-        } else {
-          welcomeMessage.style.display = 'flex';
-          resultsContent.style.display = 'none';
-        }
-      }
+      updateSearchViewVisibility();
       break;
       
     case UI_STATE.ARTICLE:
@@ -235,10 +242,7 @@ async function handleSearch() {
   if (!query) {
     hasSearched = false;
     resultsList.innerHTML = '';
-    if (welcomeMessage && resultsContent) {
-      welcomeMessage.style.display = 'flex';
-      resultsContent.style.display = 'none';
-    }
+    updateSearchViewVisibility();
     return;
   }
   
@@ -248,10 +252,7 @@ async function handleSearch() {
   hasSearched = true;
   
   // Show results container
-  if (welcomeMessage && resultsContent) {
-    welcomeMessage.style.display = 'none';
-    resultsContent.style.display = 'flex';
-  }
+  updateSearchViewVisibility();
   
   try {
     // Use the new searchArticles function with settings
@@ -356,6 +357,13 @@ async function displayArticle(articleId) {
   renderFullArticleView();
 }
 
+/**
+ * Helper function to check if all steps in an article are completed
+ */
+function areAllStepsCompleted(completionState, totalSteps) {
+  return completionState.completedStepIndexes.length === totalSteps;
+}
+
 // Render the full article view with all steps
 function renderFullArticleView() {
   if (!currentSelectedArticle) return;
@@ -364,7 +372,7 @@ function renderFullArticleView() {
   const steps = article.steps;
   const totalSteps = steps.length;
   const completionState = getCompletionState(article.id);
-  const isArticleCompleted = completionState.completedAt && completionState.completedStepIndexes.length === totalSteps;
+  const isArticleCompleted = completionState.completedAt && areAllStepsCompleted(completionState, totalSteps);
   
   const articleContentScrollable = document.getElementById('articleContentScrollable');
   
@@ -493,10 +501,10 @@ async function handleStepCheckboxChange(stepIndex, isChecked) {
   const completionState = getCompletionState(article.id);
   const totalSteps = article.steps.length;
   
-  if (completionState.completedStepIndexes.length === totalSteps && !completionState.completedAt) {
+  if (areAllStepsCompleted(completionState, totalSteps) && !completionState.completedAt) {
     // Mark article as completed
     await markArticleCompleted(article.id);
-  } else if (completionState.completedStepIndexes.length < totalSteps && completionState.completedAt) {
+  } else if (!areAllStepsCompleted(completionState, totalSteps) && completionState.completedAt) {
     // Remove article completion if user unchecks a step
     await removeArticleCompletion(article.id);
   }
