@@ -25,6 +25,9 @@
  */
 
 const Articles = {
+  // Constants
+  MAX_TITLE_LENGTH_FROM_FIRST_LINE: 100,
+  
   /**
    * Generate UUID v4 using crypto API for better randomness
    * @returns {string} UUID
@@ -1010,6 +1013,8 @@ const Articles = {
             parseResult = this.parseMarkdownArticle(content, fileNameWithoutExt);
             break;
           case 'txt':
+            // NOTE: .txt files are now treated as plain text (not markdown)
+            // This is a change from previous behavior where .txt was parsed as markdown
             parseResult = this.parseTxtArticle(content, fileNameWithoutExt);
             break;
           case 'html':
@@ -1305,8 +1310,10 @@ const Articles = {
       let title = fallbackTitle || 'Untitled Article';
       let bodyContent = content;
       
-      // If first line is short (< 100 chars), use it as title
-      if (lines.length > 0 && lines[0].trim().length > 0 && lines[0].trim().length < 100) {
+      // If first line is short (< MAX_TITLE_LENGTH_FROM_FIRST_LINE chars), use it as title
+      if (lines.length > 0 && 
+          lines[0].trim().length > 0 && 
+          lines[0].trim().length < this.MAX_TITLE_LENGTH_FROM_FIRST_LINE) {
         title = lines[0].trim();
         bodyContent = lines.slice(1).join('\n').trim();
       }
@@ -1676,11 +1683,24 @@ const Articles = {
     // Remove dangerous tags: script, iframe, object, embed
     element.querySelectorAll('script, iframe, object, embed').forEach(el => el.remove());
     
-    // Remove h1 and h2 tags from step content to avoid nesting issues
-    // (but keep their text content)
-    element.querySelectorAll('h1, h2').forEach(el => {
-      const textNode = document.createTextNode(el.textContent);
-      el.parentNode.replaceChild(textNode, el);
+    // Convert h1 to h3 and h2 to h4 in step content to avoid nesting issues
+    // while preserving document hierarchy for accessibility
+    element.querySelectorAll('h1').forEach(el => {
+      const h3 = document.createElement('h3');
+      h3.innerHTML = el.innerHTML;
+      Array.from(el.attributes).forEach(attr => {
+        h3.setAttribute(attr.name, attr.value);
+      });
+      el.parentNode.replaceChild(h3, el);
+    });
+    
+    element.querySelectorAll('h2').forEach(el => {
+      const h4 = document.createElement('h4');
+      h4.innerHTML = el.innerHTML;
+      Array.from(el.attributes).forEach(attr => {
+        h4.setAttribute(attr.name, attr.value);
+      });
+      el.parentNode.replaceChild(h4, el);
     });
     
     // Remove event handler attributes and dangerous URLs

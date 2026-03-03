@@ -475,7 +475,7 @@ async function handleImportArticle() {
       
       showUploadStatus(errorMessage, 'error');
       
-      // Console.error full stack trace (without secrets)
+      // console.error full stack trace (without secrets)
       console.error('Article import error details:', {
         fileName: result.fileName,
         errorCode: result.errorCode,
@@ -512,6 +512,7 @@ function showCopyErrorButton(errorResult) {
   copyBtn.textContent = '📋 Copy Error Details';
   copyBtn.style.marginTop = '10px';
   copyBtn.style.fontSize = '12px';
+  copyBtn.setAttribute('aria-live', 'polite');
   
   copyBtn.onclick = () => {
     const errorDetails = `
@@ -523,8 +524,10 @@ Details: ${errorResult.details || 'N/A'}
     
     navigator.clipboard.writeText(errorDetails).then(() => {
       copyBtn.textContent = '✓ Copied!';
+      copyBtn.setAttribute('aria-label', 'Error details copied to clipboard');
       setTimeout(() => {
         copyBtn.textContent = '📋 Copy Error Details';
+        copyBtn.setAttribute('aria-label', 'Copy error details to clipboard');
       }, 2000);
     }).catch(err => {
       console.error('Failed to copy:', err);
