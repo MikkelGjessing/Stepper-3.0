@@ -512,7 +512,15 @@ function showCopyErrorButton(errorResult) {
   copyBtn.textContent = '📋 Copy Error Details';
   copyBtn.style.marginTop = '10px';
   copyBtn.style.fontSize = '12px';
-  copyBtn.setAttribute('aria-live', 'polite');
+  copyBtn.setAttribute('aria-label', 'Copy error details to clipboard');
+  
+  // Create status message container with aria-live for screen readers
+  const statusSpan = document.createElement('span');
+  statusSpan.id = 'copyErrorStatus';
+  statusSpan.setAttribute('aria-live', 'polite');
+  statusSpan.style.marginLeft = '10px';
+  statusSpan.style.fontSize = '12px';
+  statusSpan.style.color = '#28a745';
   
   copyBtn.onclick = () => {
     const errorDetails = `
@@ -523,11 +531,9 @@ Details: ${errorResult.details || 'N/A'}
     `.trim();
     
     navigator.clipboard.writeText(errorDetails).then(() => {
-      copyBtn.textContent = '✓ Copied!';
-      copyBtn.setAttribute('aria-label', 'Error details copied to clipboard');
+      statusSpan.textContent = '✓ Copied!';
       setTimeout(() => {
-        copyBtn.textContent = '📋 Copy Error Details';
-        copyBtn.setAttribute('aria-label', 'Copy error details to clipboard');
+        statusSpan.textContent = '';
       }, 2000);
     }).catch(err => {
       console.error('Failed to copy:', err);
@@ -537,6 +543,7 @@ Details: ${errorResult.details || 'N/A'}
   
   // Insert after uploadStatus
   uploadStatus.parentNode.insertBefore(copyBtn, uploadStatus.nextSibling);
+  copyBtn.parentNode.insertBefore(statusSpan, copyBtn.nextSibling);
 }
 
 // Handle clear uploaded articles

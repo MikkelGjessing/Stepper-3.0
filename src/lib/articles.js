@@ -1311,11 +1311,13 @@ const Articles = {
       let bodyContent = content;
       
       // If first line is short (< MAX_TITLE_LENGTH_FROM_FIRST_LINE chars), use it as title
-      if (lines.length > 0 && 
-          lines[0].trim().length > 0 && 
-          lines[0].trim().length < this.MAX_TITLE_LENGTH_FROM_FIRST_LINE) {
-        title = lines[0].trim();
-        bodyContent = lines.slice(1).join('\n').trim();
+      if (lines.length > 0) {
+        const firstLineTrimmed = lines[0].trim();
+        if (firstLineTrimmed.length > 0 && 
+            firstLineTrimmed.length < this.MAX_TITLE_LENGTH_FROM_FIRST_LINE) {
+          title = firstLineTrimmed;
+          bodyContent = lines.slice(1).join('\n').trim();
+        }
       }
       
       // Escape HTML and convert newlines to <br>
@@ -1687,18 +1689,26 @@ const Articles = {
     // while preserving document hierarchy for accessibility
     element.querySelectorAll('h1').forEach(el => {
       const h3 = document.createElement('h3');
-      h3.innerHTML = el.innerHTML;
+      // Use textContent to avoid innerHTML security issues during sanitization
+      h3.textContent = el.textContent;
       Array.from(el.attributes).forEach(attr => {
-        h3.setAttribute(attr.name, attr.value);
+        // Don't copy dangerous attributes
+        if (!attr.name.startsWith('on') && attr.name !== 'href' && attr.name !== 'src') {
+          h3.setAttribute(attr.name, attr.value);
+        }
       });
       el.parentNode.replaceChild(h3, el);
     });
     
     element.querySelectorAll('h2').forEach(el => {
       const h4 = document.createElement('h4');
-      h4.innerHTML = el.innerHTML;
+      // Use textContent to avoid innerHTML security issues during sanitization
+      h4.textContent = el.textContent;
       Array.from(el.attributes).forEach(attr => {
-        h4.setAttribute(attr.name, attr.value);
+        // Don't copy dangerous attributes
+        if (!attr.name.startsWith('on') && attr.name !== 'href' && attr.name !== 'src') {
+          h4.setAttribute(attr.name, attr.value);
+        }
       });
       el.parentNode.replaceChild(h4, el);
     });
