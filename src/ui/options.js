@@ -241,8 +241,10 @@ async function handleResetToDefaults() {
 }
 
 // Helper function to validate URL format
+// Returns true if URL is empty (optional) or has valid format
+// Returns false if URL is provided but has invalid format
 function isValidUrl(url) {
-  if (!url) return true; // Empty URLs are considered valid (not required)
+  if (!url) return true; // Empty URLs are valid (field is optional)
   try {
     new URL(url);
     return true;
@@ -280,7 +282,7 @@ function validateSettingsForAction(settings, action) {
         return 'Please configure and save Repository URL before syncing';
       }
       
-      // Validate URL format using helper
+      // Re-validate format in case settings were imported or modified outside normal flow
       if (!isValidUrl(settings.repoUrl)) {
         return 'Invalid Repository URL format. Please correct it before syncing';
       }
@@ -292,7 +294,7 @@ function validateSettingsForAction(settings, action) {
         return 'Please configure and save Azure PAT before syncing';
       }
       
-      // Validate Azure URL format using helper
+      // Re-validate format in case settings were imported or modified outside normal flow
       if (!isValidUrl(settings.azureApiBaseUrl)) {
         return 'Invalid Azure API URL format. Please correct it before syncing';
       }
