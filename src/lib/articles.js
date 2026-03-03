@@ -1308,20 +1308,20 @@ const Articles = {
       } else {
         // Try to find first bold/paragraph or use filename
         const strong = doc.querySelector('strong, b');
-        const firstP = doc.querySelector('p');
+        const titleParagraph = doc.querySelector('p');
         if (strong && strong.textContent.trim()) {
           title = strong.textContent.trim();
           strong.remove();
-        } else if (firstP && firstP.textContent.trim()) {
-          title = firstP.textContent.trim();
-          firstP.remove();
+        } else if (titleParagraph && titleParagraph.textContent.trim()) {
+          title = titleParagraph.textContent.trim();
+          titleParagraph.remove(); // Remove to avoid duplication in steps
         } else {
           // Use filename without extension
           title = file.name.replace(/\.docx?$/i, '');
         }
       }
 
-      // Get summary from first paragraph (if no h2 before it)
+      // Get summary from first remaining paragraph (after title extraction, if no h2 before it)
       let summary = '';
       const summaryParagraph = doc.querySelector('p');
       if (summaryParagraph) {
