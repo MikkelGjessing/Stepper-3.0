@@ -7,7 +7,8 @@
 const UI_STATE = {
   SEARCH: 'search',
   ARTICLE: 'article',
-  FULL_ARTICLE: 'full_article'
+  FULL_ARTICLE: 'full_article',
+  COMPLETE: 'complete'
 };
 
 let currentUIState = UI_STATE.SEARCH;
@@ -35,6 +36,7 @@ const resultsContent = document.getElementById('resultsContent');
 const searchView = document.getElementById('searchView');
 const articleView = document.getElementById('articleView');
 const fullArticleView = document.getElementById('fullArticleView');
+const completeView = document.getElementById('completeView');
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -104,6 +106,7 @@ function setView(state) {
   searchView.style.display = 'none';
   articleView.style.display = 'none';
   fullArticleView.style.display = 'none';
+  completeView.style.display = 'none';
   
   // Show the requested view
   switch (state) {
@@ -122,6 +125,10 @@ function setView(state) {
       
     case UI_STATE.FULL_ARTICLE:
       fullArticleView.style.display = 'flex';
+      break;
+      
+    case UI_STATE.COMPLETE:
+      completeView.style.display = 'flex';
       break;
   }
 }
@@ -429,15 +436,20 @@ function renderStepView() {
   `;
   
   // Build sticky bottom navigation
+  const isLastStep = currentStepIndex === totalSteps - 1;
+  
+  // Determine which navigation button to show
+  const navButtonHtml = isLastStep 
+    ? '<button class="nav-btn primary-btn" id="completeProcessBtn">✓ Complete process</button>'
+    : '<button class="nav-btn primary-btn" id="stepContinueBtn">Continue →</button>';
+  
   let bottomNavHtml = `
     <div class="step-view-bottom-nav">
       <div class="step-nav-row">
         <button class="nav-btn secondary-btn" id="stepBackBtn" ${currentStepIndex === 0 ? 'disabled' : ''}>
           ← Back
         </button>
-        <button class="nav-btn primary-btn" id="stepContinueBtn" ${currentStepIndex === totalSteps - 1 ? 'disabled' : ''}>
-          Continue →
-        </button>
+        ${navButtonHtml}
       </div>
       <div class="step-action-row">
         <button class="action-btn secondary-btn" id="viewFullArticleBtn">📄 View full article</button>
@@ -458,6 +470,11 @@ function renderStepView() {
   const stepContinueBtn = document.getElementById('stepContinueBtn');
   if (stepContinueBtn) {
     stepContinueBtn.onclick = handleStepContinue;
+  }
+  
+  const completeProcessBtn = document.getElementById('completeProcessBtn');
+  if (completeProcessBtn) {
+    completeProcessBtn.onclick = handleCompleteProcess;
   }
   
   const viewFullArticleBtn = document.getElementById('viewFullArticleBtn');
@@ -511,6 +528,27 @@ async function handleStepContinue() {
     currentStepIndex++;
     renderStepView();
   }
+}
+
+/**
+ * Handle Complete Process button on the last step
+ * Marks the last step as completed, sets completedAt timestamp, and shows completion summary
+ */
+async function handleCompleteProcess() {
+  if (!currentSelectedArticle) return;
+  
+  const article = currentSelectedArticle;
+  const totalSteps = article.steps.length;
+  
+  // Mark the last step as completed (if not already)
+  await markStepCompleted(article.id, currentStepIndex);
+  
+  // Mark article as completed with timestamp
+  await markArticleCompleted(article.id);
+  
+  // Transition to completion summary view
+  setView(UI_STATE.COMPLETE);
+  renderCompleteView();
 }
 
 /**
@@ -640,6 +678,164 @@ function renderFullArticleView() {
       renderStepView();
     };
   });
+}
+
+/**
+ * Render the completion summary view
+ * Shows article completion status, metrics, and step overview
+ */
+function renderCompleteView() {
+  if (!currentSelectedArticle) return;
+  
+  const article = currentSelectedArticle;
+  const steps = article.steps;
+  const totalSteps = steps.length;
+  const completionState = getCompletionState(article.id);
+  const completedCount = completionState.completedStepIndexes.length;
+  const missingSteps = [];
+  
+  // Find missing steps
+  for (let i = 0; i < totalSteps; i++) {
+    if (!completionState.completedStepIndexes.includes(i)) {
+      missingSteps.push({ index: i, title: steps[i].title });
+    }
+  }
+  
+  // Format the completion date
+  let formattedDate = 'Unknown';
+  if (completionState.completedAt) {
+    try {
+      const date = new Date(completionState.completedAt);
+      formattedDate = date.toLocaleString();
+    } catch (e) {
+      console.error('Error formatting date:', e);
+    }
+  }
+  
+  const completeContentScrollable = document.getElementById('completeContentScrollable');
+  
+  // Build completion header with status banner
+  let html = `
+    <div class="complete-view-header">
+      <div class="completion-status-banner">
+        <h2>✓ Process Completed</h2>
+        <p class="completion-timestamp">Completed on ${escapeHtml(formattedDate)}</p>
+      </div>
+      
+      <h3 class="completion-article-title">${escapeHtml(article.title)}</h3>
+      
+      <div class="completion-metrics">
+        <div class="completion-metric">
+          <div class="metric-value">${completedCount} / ${totalSteps}</div>
+          <div class="metric-label">Steps completed</div>
+        </div>
+        ${missingSteps.length > 0 ? `
+          <div class="completion-metric warning">
+            <div class="metric-value">${missingSteps.length}</div>
+            <div class="metric-label">Steps missing</div>
+          </div>
+        ` : ''}
+      </div>
+      
+      ${missingSteps.length > 0 ? `
+        <div class="missing-steps-notice">
+          <h4>⚠️ Missing Steps:</h4>
+          <ul>
+            ${missingSteps.map(step => 
+              `<li>Step ${step.index + 1}: ${escapeHtml(step.title)}</li>`
+            ).join('')}
+          </ul>
+        </div>
+      ` : ''}
+    </div>
+    
+    <div class="completion-steps-overview">
+      <h4>Step Overview</h4>
+      <div class="completion-steps-list">
+        ${steps.map((step, index) => {
+          const isCompleted = completionState.completedStepIndexes.includes(index);
+          return `
+            <div class="completion-step-item ${isCompleted ? 'completed' : 'not-completed'}">
+              <div class="completion-step-indicator">
+                ${isCompleted ? '✓' : '○'}
+              </div>
+              <div class="completion-step-info">
+                <span class="completion-step-number">Step ${index + 1}</span>
+                <span class="completion-step-title">${escapeHtml(step.title)}</span>
+              </div>
+              <div class="completion-step-status">
+                ${isCompleted ? 'Completed' : 'Not completed'}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+    
+    <div class="completion-actions">
+      <button class="primary-btn" id="restartProcessBtn">🔄 Restart process</button>
+      <button class="secondary-btn" id="returnToStepBtn">← Return to step-by-step</button>
+      <button class="secondary-btn" id="searchNewFromCompleteBtn">🔍 Search for new article</button>
+    </div>
+  `;
+  
+  completeContentScrollable.innerHTML = html;
+  
+  // Add event listeners
+  const restartProcessBtn = document.getElementById('restartProcessBtn');
+  if (restartProcessBtn) {
+    restartProcessBtn.onclick = handleRestartProcess;
+  }
+  
+  const returnToStepBtn = document.getElementById('returnToStepBtn');
+  if (returnToStepBtn) {
+    returnToStepBtn.onclick = handleReturnToStepView;
+  }
+  
+  const searchNewFromCompleteBtn = document.getElementById('searchNewFromCompleteBtn');
+  if (searchNewFromCompleteBtn) {
+    searchNewFromCompleteBtn.onclick = handleSearchNewFromComplete;
+  }
+}
+
+/**
+ * Handle Return to Step-by-step button from complete view
+ * Returns to the last step in ARTICLE view
+ */
+function handleReturnToStepView() {
+  if (!currentSelectedArticle) return;
+  
+  const totalSteps = currentSelectedArticle.steps.length;
+  currentStepIndex = totalSteps - 1;
+  setView(UI_STATE.ARTICLE);
+  renderStepView();
+}
+
+/**
+ * Handle Search for new article button from complete view
+ * Returns to SEARCH view and focuses search input
+ */
+function handleSearchNewFromComplete() {
+  setView(UI_STATE.SEARCH);
+  searchInput.focus();
+}
+
+/**
+ * Handle Restart Process button
+ * Clears completion state and returns to first step
+ */
+async function handleRestartProcess() {
+  if (!currentSelectedArticle) return;
+  
+  const article = currentSelectedArticle;
+  
+  // Clear completion state for this article
+  await resetArticleProgress(article.id);
+  
+  // Return to first step
+  currentStepIndex = 0;
+  setView(UI_STATE.ARTICLE);
+  renderStepView();
 }
 
 // Show notification
