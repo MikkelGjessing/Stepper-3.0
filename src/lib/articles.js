@@ -973,71 +973,114 @@ const Articles = {
 
   /**
    * Import article from file
-   * @param {File} file - File object (.md, .html, .txt, .json)
-   * @returns {Promise<Object>} Result object with success status and message
+   * @param {File} file - File object (.md, .html, .htm, .txt, .json, .docx, .doc)
+   * @returns {Promise<Object>} Result object with ok status and message or error details
    */
   async importArticleFile(file) {
+    const fileName = file.name;
+    const fileNameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.')) || fileName;
+    
     try {
-      const fileType = file.name.split('.').pop().toLowerCase();
+      const fileType = fileName.split('.').pop().toLowerCase();
       
-      let article;
+      let parseResult;
       
       // Handle DOCX files differently (need ArrayBuffer)
       if (fileType === 'docx' || fileType === 'doc') {
-        article = await this.parseDocxArticle(file);
+        parseResult = await this.parseDocxArticle(file, fileNameWithoutExt);
       } else {
-        const content = await file.text();
+        let content;
+        try {
+          content = await file.text();
+        } catch (readError) {
+          return {
+            ok: false,
+            errorCode: 'FILE_READ_ERROR',
+            message: `Failed to read file: ${fileName}`,
+            details: readError.message,
+            fileName: fileName
+          };
+        }
         
         switch (fileType) {
           case 'json':
-            article = this.parseJsonArticle(content);
+            parseResult = this.parseJsonArticle(content, fileNameWithoutExt);
             break;
           case 'md':
+            parseResult = this.parseMarkdownArticle(content, fileNameWithoutExt);
+            break;
           case 'txt':
-            article = this.parseMarkdownArticle(content);
+            parseResult = this.parseTxtArticle(content, fileNameWithoutExt);
             break;
           case 'html':
-            article = this.parseHtmlArticle(content);
+          case 'htm':
+            parseResult = this.parseHtmlArticle(content, fileNameWithoutExt);
             break;
           default:
             return {
-              success: false,
-              message: `Unsupported file type: .${fileType}`
+              ok: false,
+              errorCode: 'UNSUPPORTED_FILE_TYPE',
+              message: `Unsupported file type: .${fileType}`,
+              details: `Supported formats: .json, .md, .html, .htm, .txt, .docx, .doc`,
+              fileName: fileName
             };
         }
       }
       
-      if (!article) {
+      // Check parse result
+      if (!parseResult.ok) {
         return {
-          success: false,
-          message: 'Failed to parse article content'
+          ...parseResult,
+          fileName: fileName
         };
       }
+      
+      const article = parseResult.article;
       
       // Ensure source is 'uploaded'
       article.source = 'uploaded';
       
       // Upsert the article
-      const savedArticle = await this.upsertArticle(article);
+      let savedArticle;
+      try {
+        savedArticle = await this.upsertArticle(article);
+      } catch (saveError) {
+        console.error('Error saving article:', saveError);
+        return {
+          ok: false,
+          errorCode: 'SAVE_ERROR',
+          message: 'Failed to save article to storage',
+          details: saveError.message,
+          fileName: fileName
+        };
+      }
       
       if (savedArticle) {
         return {
-          success: true,
+          ok: true,
           message: `Successfully imported: ${article.title}`,
-          article: savedArticle
+          article: savedArticle,
+          fileName: fileName
         };
       } else {
         return {
-          success: false,
-          message: 'Failed to save article'
+          ok: false,
+          errorCode: 'SAVE_ERROR',
+          message: 'Failed to save article to storage',
+          details: 'upsertArticle returned null',
+          fileName: fileName
         };
       }
       
     } catch (error) {
       console.error('Error importing article:', error);
       return {
-        success: false,
-        message: `Import error: ${error.message}`
+        ok: false,
+        errorCode: 'UNEXPECTED_ERROR',
+        message: `Unexpected error importing ${fileName}`,
+        details: error.message,
+        stack: error.stack,
+        fileName: fileName
       };
     }
   },
@@ -1045,31 +1088,78 @@ const Articles = {
   /**
    * Parse JSON article
    * @param {string} content - JSON content
-   * @returns {Object|null} Parsed article
+   * @param {string} fallbackTitle - Fallback title if parsing fails
+   * @returns {Object} Result with ok status and article or error details
    */
-  parseJsonArticle(content) {
+  parseJsonArticle(content, fallbackTitle) {
     try {
-      const data = JSON.parse(content);
+      let data;
+      try {
+        data = JSON.parse(content);
+      } catch (jsonError) {
+        return {
+          ok: false,
+          errorCode: 'JSON_PARSE_ERROR',
+          message: 'Invalid JSON format',
+          details: jsonError.message
+        };
+      }
       
       // Validate required fields
       if (!data.title) {
-        throw new Error('JSON must contain a title field');
+        return {
+          ok: false,
+          errorCode: 'MISSING_REQUIRED_FIELD',
+          message: 'JSON must contain a "title" field',
+          details: 'Required field: title'
+        };
+      }
+      
+      // Validate steps if present
+      let steps = [];
+      if (Array.isArray(data.steps)) {
+        steps = data.steps;
+        // If steps array is empty, create fallback
+        if (steps.length === 0) {
+          steps = [{
+            index: 1,
+            title: 'Procedure',
+            bodyHtml: '<p>No steps provided in JSON.</p>',
+            images: []
+          }];
+        }
+      } else {
+        // No steps provided, create fallback
+        steps = [{
+          index: 1,
+          title: 'Procedure',
+          bodyHtml: '<p>No steps provided in JSON.</p>',
+          images: []
+        }];
       }
       
       return {
-        id: data.id || this.generateUUID(),
-        title: data.title,
-        summary: data.summary || '',
-        tags: Array.isArray(data.tags) ? data.tags : [],
-        estimatedMinutes: data.estimatedMinutes || null,
-        steps: Array.isArray(data.steps) ? data.steps : [],
-        source: 'uploaded',
-        createdAt: data.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        ok: true,
+        article: {
+          id: data.id || this.generateUUID(),
+          title: data.title,
+          summary: data.summary || '',
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          estimatedMinutes: data.estimatedMinutes || null,
+          steps: steps,
+          source: 'uploaded',
+          createdAt: data.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
       };
     } catch (error) {
       console.error('Error parsing JSON article:', error);
-      return null;
+      return {
+        ok: false,
+        errorCode: 'JSON_PARSE_UNEXPECTED_ERROR',
+        message: 'Unexpected error parsing JSON',
+        details: error.message
+      };
     }
   },
 
@@ -1077,9 +1167,10 @@ const Articles = {
    * Parse Markdown article
    * Conventions: First line # Title, ## Step: ... creates steps
    * @param {string} content - Markdown content
-   * @returns {Object|null} Parsed article
+   * @param {string} fallbackTitle - Fallback title if parsing fails
+   * @returns {Object} Result with ok status and article or error details
    */
-  parseMarkdownArticle(content) {
+  parseMarkdownArticle(content, fallbackTitle) {
     try {
       const lines = content.split('\n');
       let title = '';
@@ -1158,24 +1249,99 @@ const Articles = {
         steps.push(currentStep);
       }
       
+      // Use fallback title if no title found
       if (!title) {
-        throw new Error('Markdown must contain a # Title heading');
+        title = fallbackTitle || 'Untitled Article';
+      }
+      
+      // If no steps found, create a single-step fallback
+      if (steps.length === 0) {
+        // Use all content as a single step
+        const bodyHtml = this.markdownToHtml(content);
+        steps.push({
+          index: 1,
+          title: 'Procedure',
+          bodyHtml: bodyHtml,
+          images: []
+        });
       }
       
       return {
-        id: this.generateUUID(),
-        title: title,
-        summary: summary,
-        tags: [],
-        estimatedMinutes: null,
-        steps: steps,
-        source: 'uploaded',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        ok: true,
+        article: {
+          id: this.generateUUID(),
+          title: title,
+          summary: summary,
+          tags: [],
+          estimatedMinutes: null,
+          steps: steps,
+          source: 'uploaded',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
       };
     } catch (error) {
       console.error('Error parsing Markdown article:', error);
-      return null;
+      return {
+        ok: false,
+        errorCode: 'MARKDOWN_PARSE_ERROR',
+        message: 'Failed to parse Markdown content',
+        details: error.message
+      };
+    }
+  },
+
+  /**
+   * Parse plain text article
+   * Treats entire content as a single step, escapes HTML, converts newlines to <br>
+   * @param {string} content - Plain text content
+   * @param {string} fallbackTitle - Fallback title (filename without extension)
+   * @returns {Object} Result with ok status and article or error details
+   */
+  parseTxtArticle(content, fallbackTitle) {
+    try {
+      // Use first line as title if it's short, otherwise use fallback
+      const lines = content.split('\n');
+      let title = fallbackTitle || 'Untitled Article';
+      let bodyContent = content;
+      
+      // If first line is short (< 100 chars), use it as title
+      if (lines.length > 0 && lines[0].trim().length > 0 && lines[0].trim().length < 100) {
+        title = lines[0].trim();
+        bodyContent = lines.slice(1).join('\n').trim();
+      }
+      
+      // Escape HTML and convert newlines to <br>
+      const escapedContent = this.escapeHtml(bodyContent || content);
+      const bodyHtml = escapedContent.replace(/\n/g, '<br>');
+      
+      return {
+        ok: true,
+        article: {
+          id: this.generateUUID(),
+          title: title,
+          summary: '',
+          tags: [],
+          estimatedMinutes: null,
+          steps: [{
+            index: 1,
+            title: 'Procedure',
+            bodyHtml: bodyHtml,
+            images: []
+          }],
+          source: 'uploaded',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      console.error('Error parsing text article:', error);
+      return {
+        ok: false,
+        errorCode: 'TEXT_PARSE_ERROR',
+        message: 'Failed to parse text content',
+        details: error.message
+      };
     }
   },
 
@@ -1183,19 +1349,17 @@ const Articles = {
    * Parse HTML article
    * Conventions: <h1> as title, <h2> sections as steps
    * @param {string} content - HTML content
-   * @returns {Object|null} Parsed article
+   * @param {string} fallbackTitle - Fallback title if parsing fails
+   * @returns {Object} Result with ok status and article or error details
    */
-  parseHtmlArticle(content) {
+  parseHtmlArticle(content, fallbackTitle) {
     try {
       const parser = new DOMParser();
       const doc = parser.parseFromString(content, 'text/html');
       
-      // Get title from <h1>
+      // Get title from <h1>, use fallback if not found
       const h1 = doc.querySelector('h1');
-      if (!h1) {
-        throw new Error('HTML must contain an <h1> element for the title');
-      }
-      const title = h1.textContent.trim();
+      const title = h1 ? h1.textContent.trim() : (fallbackTitle || 'Untitled Article');
       
       // Get summary from first paragraph before first h2
       let summary = '';
@@ -1211,13 +1375,54 @@ const Articles = {
       const h2Elements = doc.querySelectorAll('h2');
       const steps = [];
       
-      h2Elements.forEach((h2, index) => {
-        const stepTitle = h2.textContent.trim();
-        const stepContent = this.getContentUntilNextHeading(h2);
+      if (h2Elements.length > 0) {
+        h2Elements.forEach((h2, index) => {
+          const stepTitle = h2.textContent.trim();
+          const stepContent = this.getContentUntilNextHeading(h2);
+          
+          // Extract and sanitize images from step content
+          const images = [];
+          const imgElements = stepContent.querySelectorAll('img');
+          imgElements.forEach(img => {
+            const src = img.getAttribute('src') || '';
+            const alt = img.getAttribute('alt') || '';
+            const sanitizedSrc = this.sanitizeImageUrl(src);
+            if (sanitizedSrc) {
+              images.push({
+                alt: alt,
+                dataUrlOrRemoteUrl: sanitizedSrc
+              });
+              // Update the img tag with sanitized URL
+              img.setAttribute('src', sanitizedSrc);
+            } else {
+              // Remove invalid image
+              img.remove();
+            }
+          });
+          
+          // Sanitize the HTML content by removing scripts and dangerous attributes
+          const sanitizedContent = this.sanitizeHtmlContent(stepContent);
+          
+          steps.push({
+            index: index + 1,
+            title: stepTitle,
+            bodyHtml: sanitizedContent.innerHTML,
+            images: images
+          });
+        });
+      } else {
+        // No h2 elements found, create single-step fallback using body content
+        const bodyContent = doc.body.cloneNode(true);
         
-        // Extract and sanitize images from step content
+        // Remove h1 from body content to avoid duplication
+        const h1InBody = bodyContent.querySelector('h1');
+        if (h1InBody) {
+          h1InBody.remove();
+        }
+        
+        // Extract images
         const images = [];
-        const imgElements = stepContent.querySelectorAll('img');
+        const imgElements = bodyContent.querySelectorAll('img');
         imgElements.forEach(img => {
           const src = img.getAttribute('src') || '';
           const alt = img.getAttribute('alt') || '';
@@ -1227,71 +1432,103 @@ const Articles = {
               alt: alt,
               dataUrlOrRemoteUrl: sanitizedSrc
             });
-            // Update the img tag with sanitized URL
             img.setAttribute('src', sanitizedSrc);
           } else {
-            // Remove invalid image
             img.remove();
           }
         });
         
-        // Sanitize the HTML content by removing scripts and dangerous attributes
-        const sanitizedContent = this.sanitizeHtmlContent(stepContent);
+        // Sanitize content
+        const sanitizedContent = this.sanitizeHtmlContent(bodyContent);
         
         steps.push({
-          index: index + 1,
-          title: stepTitle,
+          index: 1,
+          title: 'Procedure',
           bodyHtml: sanitizedContent.innerHTML,
           images: images
         });
-      });
+      }
       
       return {
-        id: this.generateUUID(),
-        title: title,
-        summary: summary,
-        tags: [],
-        estimatedMinutes: null,
-        steps: steps,
-        source: 'uploaded',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        ok: true,
+        article: {
+          id: this.generateUUID(),
+          title: title,
+          summary: summary,
+          tags: [],
+          estimatedMinutes: null,
+          steps: steps,
+          source: 'uploaded',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
       };
     } catch (error) {
       console.error('Error parsing HTML article:', error);
-      return null;
+      return {
+        ok: false,
+        errorCode: 'HTML_PARSE_ERROR',
+        message: 'Failed to parse HTML content',
+        details: error.message
+      };
     }
   },
 
   /**
    * Parse DOCX article using Mammoth
    * @param {File} file - DOCX file
-   * @returns {Promise<Object|null>} Parsed article
+   * @param {string} fallbackTitle - Fallback title (filename without extension)
+   * @returns {Promise<Object>} Result with ok status and article or error details
    */
-  async parseDocxArticle(file) {
+  async parseDocxArticle(file, fallbackTitle) {
     try {
       // Check if mammoth is available
       if (typeof mammoth === 'undefined') {
         console.error('Mammoth library not loaded');
-        throw new Error('DOCX parsing library not available');
+        return {
+          ok: false,
+          errorCode: 'DOCX_LIBRARY_NOT_AVAILABLE',
+          message: 'DOCX parsing library not available',
+          details: 'Mammoth.js library is not loaded. Please check that the vendor file is properly included.'
+        };
       }
 
       // Read file as ArrayBuffer
-      const arrayBuffer = await file.arrayBuffer();
+      let arrayBuffer;
+      try {
+        arrayBuffer = await file.arrayBuffer();
+      } catch (readError) {
+        return {
+          ok: false,
+          errorCode: 'DOCX_READ_ERROR',
+          message: 'Failed to read DOCX file',
+          details: readError.message
+        };
+      }
 
       // Convert DOCX to HTML using Mammoth
-      const result = await mammoth.convertToHtml(
-        { arrayBuffer: arrayBuffer },
-        {
-          convertImage: mammoth.images.imgElement(function(image) {
-            return image.read("base64").then(function(imageBuffer) {
-              return {
-                src: "data:" + image.contentType + ";base64," + imageBuffer
-              };
-            });
-          })
-        }
-      );
+      let result;
+      try {
+        result = await mammoth.convertToHtml(
+          { arrayBuffer: arrayBuffer },
+          {
+            convertImage: mammoth.images.imgElement(function(image) {
+              return image.read("base64").then(function(imageBuffer) {
+                return {
+                  src: "data:" + image.contentType + ";base64," + imageBuffer
+                };
+              });
+            })
+          }
+        );
+      } catch (convertError) {
+        return {
+          ok: false,
+          errorCode: 'DOCX_CONVERSION_ERROR',
+          message: 'Failed to convert DOCX to HTML',
+          details: convertError.message
+        };
+      }
 
       const htmlContent = result.value;
       
@@ -1316,8 +1553,8 @@ const Articles = {
           title = titleParagraph.textContent.trim();
           titleParagraph.remove(); // Remove to avoid duplication in steps
         } else {
-          // Use filename without extension
-          title = file.name.replace(/\.docx?$/i, '');
+          // Use fallback title
+          title = fallbackTitle || 'Untitled Article';
         }
       }
 
@@ -1406,19 +1643,27 @@ const Articles = {
       }
 
       return {
-        id: this.generateUUID(),
-        title: title,
-        summary: summary,
-        tags: [],
-        estimatedMinutes: null,
-        steps: steps,
-        source: 'uploaded',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        ok: true,
+        article: {
+          id: this.generateUUID(),
+          title: title,
+          summary: summary,
+          tags: [],
+          estimatedMinutes: null,
+          steps: steps,
+          source: 'uploaded',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
       };
     } catch (error) {
       console.error('Error parsing DOCX article:', error);
-      return null;
+      return {
+        ok: false,
+        errorCode: 'DOCX_PARSE_ERROR',
+        message: 'Unexpected error parsing DOCX',
+        details: error.message
+      };
     }
   },
 
@@ -1428,8 +1673,15 @@ const Articles = {
    * @returns {Element} Sanitized element
    */
   sanitizeHtmlContent(element) {
-    // Remove script tags
-    element.querySelectorAll('script').forEach(el => el.remove());
+    // Remove dangerous tags: script, iframe, object, embed
+    element.querySelectorAll('script, iframe, object, embed').forEach(el => el.remove());
+    
+    // Remove h1 and h2 tags from step content to avoid nesting issues
+    // (but keep their text content)
+    element.querySelectorAll('h1, h2').forEach(el => {
+      const textNode = document.createTextNode(el.textContent);
+      el.parentNode.replaceChild(textNode, el);
+    });
     
     // Remove event handler attributes and dangerous URLs
     element.querySelectorAll('*').forEach(el => {

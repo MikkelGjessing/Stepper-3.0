@@ -460,21 +460,80 @@ async function handleImportArticle() {
     
     const result = await Articles.importArticleFile(file);
     
-    if (result.success) {
+    // Handle new response format with ok/success field
+    const isSuccess = result.ok === true || result.success === true;
+    
+    if (isSuccess) {
       showUploadStatus(result.message, 'success');
       articleFileInput.value = ''; // Clear file input
       await updateUploadedArticlesCount();
     } else {
-      showUploadStatus(result.message, 'error');
+      // Display detailed error with file name
+      const errorMessage = result.fileName 
+        ? `Failed to import "${result.fileName}": ${result.message}`
+        : result.message || 'Failed to import article';
+      
+      showUploadStatus(errorMessage, 'error');
+      
+      // Console.error full stack trace (without secrets)
+      console.error('Article import error details:', {
+        fileName: result.fileName,
+        errorCode: result.errorCode,
+        message: result.message,
+        details: result.details,
+        stack: result.stack
+      });
+      
+      // Show "Copy error details" button
+      showCopyErrorButton(result);
     }
     
   } catch (error) {
     console.error('Error importing article:', error);
-    showUploadStatus('Failed to import article: ' + error.message, 'error');
+    showUploadStatus('Unexpected error: ' + error.message, 'error');
   } finally {
     importArticleBtn.disabled = false;
     importArticleBtn.textContent = '📥 Import';
   }
+}
+
+// Show copy error details button
+function showCopyErrorButton(errorResult) {
+  // Remove any existing error button
+  const existingBtn = document.getElementById('copyErrorBtn');
+  if (existingBtn) {
+    existingBtn.remove();
+  }
+  
+  // Create copy error button
+  const copyBtn = document.createElement('button');
+  copyBtn.id = 'copyErrorBtn';
+  copyBtn.className = 'btn btn-secondary';
+  copyBtn.textContent = '📋 Copy Error Details';
+  copyBtn.style.marginTop = '10px';
+  copyBtn.style.fontSize = '12px';
+  
+  copyBtn.onclick = () => {
+    const errorDetails = `
+File: ${errorResult.fileName || 'unknown'}
+Error Code: ${errorResult.errorCode || 'N/A'}
+Message: ${errorResult.message || 'N/A'}
+Details: ${errorResult.details || 'N/A'}
+    `.trim();
+    
+    navigator.clipboard.writeText(errorDetails).then(() => {
+      copyBtn.textContent = '✓ Copied!';
+      setTimeout(() => {
+        copyBtn.textContent = '📋 Copy Error Details';
+      }, 2000);
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy to clipboard');
+    });
+  };
+  
+  // Insert after uploadStatus
+  uploadStatus.parentNode.insertBefore(copyBtn, uploadStatus.nextSibling);
 }
 
 // Handle clear uploaded articles
