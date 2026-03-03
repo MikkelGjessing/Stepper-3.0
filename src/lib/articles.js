@@ -2480,7 +2480,9 @@ const Articles = {
       console.log(`Index: ${step.index}`);
       console.log(`Images: ${step.images.length}`);
       console.log(`Body HTML length: ${step.bodyHtml.length} characters`);
-      console.log(`Body preview: ${step.bodyHtml.substring(0, 100).replace(/<[^>]+>/g, '')}...`);
+      // Strip HTML tags for console preview (not for sanitization - just for display)
+      const preview = step.bodyHtml.substring(0, 100).replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, '').trim();
+      console.log(`Body preview: ${preview}...`);
       console.groupEnd();
     });
     
