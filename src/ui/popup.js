@@ -437,16 +437,19 @@ function renderStepView() {
   
   // Build sticky bottom navigation
   const isLastStep = currentStepIndex === totalSteps - 1;
+  
+  // Determine which navigation button to show
+  const navButtonHtml = isLastStep 
+    ? '<button class="nav-btn primary-btn" id="completeProcessBtn">✓ Complete process</button>'
+    : '<button class="nav-btn primary-btn" id="stepContinueBtn">Continue →</button>';
+  
   let bottomNavHtml = `
     <div class="step-view-bottom-nav">
       <div class="step-nav-row">
         <button class="nav-btn secondary-btn" id="stepBackBtn" ${currentStepIndex === 0 ? 'disabled' : ''}>
           ← Back
         </button>
-        ${isLastStep 
-          ? `<button class="nav-btn primary-btn" id="completeProcessBtn">✓ Complete process</button>`
-          : `<button class="nav-btn primary-btn" id="stepContinueBtn">Continue →</button>`
-        }
+        ${navButtonHtml}
       </div>
       <div class="step-action-row">
         <button class="action-btn secondary-btn" id="viewFullArticleBtn">📄 View full article</button>
