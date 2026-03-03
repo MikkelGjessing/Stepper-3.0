@@ -1317,17 +1317,17 @@ const Articles = {
           firstP.remove();
         } else {
           // Use filename without extension
-          title = file.name.replace(/\.(docx?|doc)$/i, '');
+          title = file.name.replace(/\.docx?$/i, '');
         }
       }
 
       // Get summary from first paragraph (if no h2 before it)
       let summary = '';
-      const firstP = doc.querySelector('p');
-      if (firstP) {
+      const summaryParagraph = doc.querySelector('p');
+      if (summaryParagraph) {
         const firstH2 = doc.querySelector('h2');
-        if (!firstH2 || this.isBefore(firstP, firstH2)) {
-          summary = firstP.textContent.trim();
+        if (!firstH2 || this.isBefore(summaryParagraph, firstH2)) {
+          summary = summaryParagraph.textContent.trim();
         }
       }
 
