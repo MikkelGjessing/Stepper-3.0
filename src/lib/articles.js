@@ -979,26 +979,32 @@ const Articles = {
   async importArticleFile(file) {
     try {
       const fileType = file.name.split('.').pop().toLowerCase();
-      const content = await file.text();
       
       let article;
       
-      switch (fileType) {
-        case 'json':
-          article = this.parseJsonArticle(content);
-          break;
-        case 'md':
-        case 'txt':
-          article = this.parseMarkdownArticle(content);
-          break;
-        case 'html':
-          article = this.parseHtmlArticle(content);
-          break;
-        default:
-          return {
-            success: false,
-            message: `Unsupported file type: .${fileType}`
-          };
+      // Handle DOCX files differently (need ArrayBuffer)
+      if (fileType === 'docx' || fileType === 'doc') {
+        article = await this.parseDocxArticle(file);
+      } else {
+        const content = await file.text();
+        
+        switch (fileType) {
+          case 'json':
+            article = this.parseJsonArticle(content);
+            break;
+          case 'md':
+          case 'txt':
+            article = this.parseMarkdownArticle(content);
+            break;
+          case 'html':
+            article = this.parseHtmlArticle(content);
+            break;
+          default:
+            return {
+              success: false,
+              message: `Unsupported file type: .${fileType}`
+            };
+        }
       }
       
       if (!article) {
@@ -1253,6 +1259,165 @@ const Articles = {
       };
     } catch (error) {
       console.error('Error parsing HTML article:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Parse DOCX article using Mammoth
+   * @param {File} file - DOCX file
+   * @returns {Promise<Object|null>} Parsed article
+   */
+  async parseDocxArticle(file) {
+    try {
+      // Check if mammoth is available
+      if (typeof mammoth === 'undefined') {
+        console.error('Mammoth library not loaded');
+        throw new Error('DOCX parsing library not available');
+      }
+
+      // Read file as ArrayBuffer
+      const arrayBuffer = await file.arrayBuffer();
+
+      // Convert DOCX to HTML using Mammoth
+      const result = await mammoth.convertToHtml(
+        { arrayBuffer: arrayBuffer },
+        {
+          convertImage: mammoth.images.imgElement(function(image) {
+            return image.read("base64").then(function(imageBuffer) {
+              return {
+                src: "data:" + image.contentType + ";base64," + imageBuffer
+              };
+            });
+          })
+        }
+      );
+
+      const htmlContent = result.value;
+      
+      // Parse the HTML content
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlContent, 'text/html');
+
+      // Extract title
+      let title = '';
+      const h1 = doc.querySelector('h1');
+      if (h1) {
+        title = h1.textContent.trim();
+        h1.remove(); // Remove h1 from content to avoid duplication
+      } else {
+        // Try to find first bold/paragraph or use filename
+        const strong = doc.querySelector('strong, b');
+        const titleParagraph = doc.querySelector('p');
+        if (strong && strong.textContent.trim()) {
+          title = strong.textContent.trim();
+          strong.remove();
+        } else if (titleParagraph && titleParagraph.textContent.trim()) {
+          title = titleParagraph.textContent.trim();
+          titleParagraph.remove(); // Remove to avoid duplication in steps
+        } else {
+          // Use filename without extension
+          title = file.name.replace(/\.docx?$/i, '');
+        }
+      }
+
+      // Get summary from first remaining paragraph (after title extraction, if no h2 before it)
+      let summary = '';
+      const summaryParagraph = doc.querySelector('p');
+      if (summaryParagraph) {
+        const firstH2 = doc.querySelector('h2');
+        if (!firstH2 || this.isBefore(summaryParagraph, firstH2)) {
+          summary = summaryParagraph.textContent.trim();
+        }
+      }
+
+      // Parse steps from <h2> sections
+      const h2Elements = doc.querySelectorAll('h2');
+      const steps = [];
+
+      if (h2Elements.length > 0) {
+        // Multiple steps based on h2 headings
+        h2Elements.forEach((h2, index) => {
+          const stepTitle = h2.textContent.trim();
+          const stepContent = this.getContentUntilNextHeading(h2);
+
+          // Extract images from step content
+          const images = [];
+          const imgElements = stepContent.querySelectorAll('img');
+          imgElements.forEach(img => {
+            const src = img.getAttribute('src') || '';
+            const alt = img.getAttribute('alt') || '';
+            const sanitizedSrc = this.sanitizeImageUrl(src);
+            if (sanitizedSrc) {
+              images.push({
+                alt: alt,
+                dataUrlOrRemoteUrl: sanitizedSrc
+              });
+              img.setAttribute('src', sanitizedSrc);
+            } else {
+              img.remove();
+            }
+          });
+
+          // Sanitize the HTML content
+          const sanitizedContent = this.sanitizeHtmlContent(stepContent);
+
+          steps.push({
+            index: index + 1,
+            title: stepTitle,
+            bodyHtml: sanitizedContent.innerHTML,
+            images: images
+          });
+        });
+      } else {
+        // Single step article - treat all content as one step
+        const stepContent = document.createElement('div');
+        
+        // Get all remaining content
+        const bodyContent = doc.body.cloneNode(true);
+        
+        // Extract images
+        const images = [];
+        const imgElements = bodyContent.querySelectorAll('img');
+        imgElements.forEach(img => {
+          const src = img.getAttribute('src') || '';
+          const alt = img.getAttribute('alt') || '';
+          const sanitizedSrc = this.sanitizeImageUrl(src);
+          if (sanitizedSrc) {
+            images.push({
+              alt: alt,
+              dataUrlOrRemoteUrl: sanitizedSrc
+            });
+            img.setAttribute('src', sanitizedSrc);
+          } else {
+            img.remove();
+          }
+        });
+
+        // Sanitize content
+        const sanitizedContent = this.sanitizeHtmlContent(bodyContent);
+
+        steps.push({
+          index: 1,
+          title: 'Procedure',
+          bodyHtml: sanitizedContent.innerHTML,
+          images: images
+        });
+      }
+
+      return {
+        id: this.generateUUID(),
+        title: title,
+        summary: summary,
+        tags: [],
+        estimatedMinutes: null,
+        steps: steps,
+        source: 'uploaded',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error parsing DOCX article:', error);
       return null;
     }
   },
