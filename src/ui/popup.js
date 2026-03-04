@@ -79,8 +79,28 @@ function setupEventListeners() {
     showNotification('Articles refreshed');
   });
 
+  // Image modal close handlers
+  const imageModalBackdrop = document.getElementById('imageModalBackdrop');
+  if (imageModalBackdrop) {
+    imageModalBackdrop.addEventListener('click', closeImageModal);
+  }
+  const imageModalClose = document.getElementById('imageModalClose');
+  if (imageModalClose) {
+    imageModalClose.addEventListener('click', closeImageModal);
+  }
+
   // Keyboard navigation for ARTICLE mode
   document.addEventListener('keydown', (e) => {
+    // Close image modal on ESC regardless of UI state
+    if (e.key === 'Escape') {
+      const modal = document.getElementById('imageModal');
+      if (modal && modal.style.display !== 'none') {
+        closeImageModal();
+        e.preventDefault();
+        return;
+      }
+    }
+
     if (currentUIState !== UI_STATE.ARTICLE) return;
     const target = e.target;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
@@ -462,6 +482,9 @@ function renderStepView() {
     </div>
   `;
   
+  // Wrap images with thumbnail preview system
+  wrapImagesWithPreview(articleContentScrollable);
+
   // Build nav buttons for footer
   const isLastStep = currentStepIndex === totalSteps - 1;
   const navButtonHtml = isLastStep 
@@ -676,6 +699,9 @@ function renderFullArticleView() {
   // Combine everything
   fullArticleContentScrollable.innerHTML = headerHtml + stepsHtml;
   
+  // Wrap images with thumbnail preview system
+  wrapImagesWithPreview(fullArticleContentScrollable);
+
   // Add event listeners for navigation buttons (using onclick to avoid duplicate listeners)
   const backToStepViewBtn = document.getElementById('backToStepViewBtn');
   if (backToStepViewBtn) {
@@ -915,4 +941,83 @@ function sanitizeHtml(html) {
   });
   
   return div.innerHTML;
+}
+
+/**
+ * Wraps all <img> elements inside a container with a compact thumbnail preview
+ * and attaches click/keyboard handlers to open the modal viewer.
+ */
+function wrapImagesWithPreview(container) {
+  if (!container) return;
+  const images = container.querySelectorAll('img');
+  images.forEach(img => {
+    // Skip if already wrapped inside a preview container
+    if (img.closest('.image-preview')) return;
+
+    const src = img.src || img.getAttribute('src') || '';
+    const alt = img.alt || '';
+
+    // Build preview wrapper
+    const preview = document.createElement('div');
+    preview.className = 'image-preview';
+    preview.setAttribute('role', 'button');
+    preview.setAttribute('tabindex', '0');
+    preview.setAttribute('aria-label', 'Click to display image');
+
+    // Thumbnail image (reuse original src, lazy-load)
+    const thumb = document.createElement('img');
+    thumb.className = 'image-thumb';
+    thumb.src = src;
+    thumb.alt = alt;
+    thumb.loading = 'lazy';
+    thumb.addEventListener('error', () => {
+      preview.style.display = 'none';
+    });
+
+    // Overlay text
+    const overlay = document.createElement('div');
+    overlay.className = 'image-overlay';
+    overlay.textContent = 'Click to display image';
+
+    // Replace original img with preview container
+    img.parentNode.insertBefore(preview, img);
+    preview.appendChild(thumb);
+    preview.appendChild(overlay);
+    img.remove();
+
+    // Open modal on click or Enter key
+    const openModal = () => openImageModal(src, alt);
+    preview.addEventListener('click', openModal);
+    preview.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        openModal();
+        e.preventDefault();
+      }
+    });
+  });
+}
+
+/**
+ * Open the image modal viewer with the given image src and alt text.
+ */
+function openImageModal(src, alt) {
+  const modal = document.getElementById('imageModal');
+  const modalImg = document.getElementById('imageModalImg');
+  if (!modal || !modalImg) return;
+  modalImg.src = src;
+  modalImg.alt = alt || '';
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+/**
+ * Close the image modal viewer.
+ */
+function closeImageModal() {
+  const modal = document.getElementById('imageModal');
+  if (!modal) return;
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+  const modalImg = document.getElementById('imageModalImg');
+  if (modalImg) modalImg.src = '';
 }

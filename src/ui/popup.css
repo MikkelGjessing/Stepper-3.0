@@ -5,6 +5,15 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-x: hidden;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
@@ -235,6 +244,7 @@ body {
 .article-step-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
   padding: 16px 20px;
   line-height: 1.8;
@@ -383,6 +393,7 @@ body {
 .full-article-content-scrollable {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px;
 }
 
@@ -1259,4 +1270,116 @@ body {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+/* ── Image Thumbnail Preview System ── */
+
+.image-preview {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin: 10px 0;
+  cursor: pointer;
+  outline: none;
+}
+
+.image-preview:focus {
+  box-shadow: 0 0 0 2px #667eea;
+}
+
+.image-thumb {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: 120px;
+  height: auto;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.image-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.image-preview:hover .image-overlay,
+.image-preview:focus .image-overlay {
+  opacity: 1;
+}
+
+/* ── Image Modal Viewer ── */
+
+.image-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+}
+
+.image-modal-content {
+  position: relative;
+  z-index: 1;
+  max-width: 75vw;
+  max-height: 75vh;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-modal-content img {
+  display: block;
+  max-width: 75vw;
+  max-height: 75vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.image-modal-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.image-modal-close:hover {
+  background: rgba(0, 0, 0, 0.85);
 }
