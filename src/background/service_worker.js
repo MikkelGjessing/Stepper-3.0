@@ -47,6 +47,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.log('Article refresh requested');
       sendResponse({ status: 'success', message: 'Refresh initiated' });
       break;
+    case 'SCAN_PAGE':
+      handleScanPage(message.keywords)
+        .then(result => sendResponse(result))
+        .catch(() => sendResponse({ results: {} }));
+      return true; // Keep message channel open for async response
     case 'SYNC_REPO':
       handleSyncRepo(message.settings)
         .then(result => sendResponse(result))
@@ -61,6 +66,53 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   return true; // Keep message channel open for async responses
 });
+
+/**
+ * Scan the active tab page for ID values matching the given keywords.
+ * Uses chrome.scripting.executeScript to run an inline function in the page.
+ * @param {string[]} keywords - List of ID keyword names to look up (e.g. ["customerID"])
+ * @returns {Promise<{results: Object}>} Map of keyword → found value
+ */
+async function handleScanPage(keywords) {
+  try {
+    if (!Array.isArray(keywords) || keywords.length === 0) return { results: {} };
+
+    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (!tabs?.length) return { results: {} };
+
+    const tab = tabs[0];
+    // Skip chrome-internal and extension pages (scripting API cannot access them)
+    const url = tab.url || '';
+    if (!tab.id || url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('devtools://')) {
+      return { results: {} };
+    }
+
+    const injectionResults = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: (keywords) => {
+        const results = {};
+        const bodyText = document.body ? document.body.innerText : '';
+        keywords.forEach(keyword => {
+          const esc = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          // Match keyword (case-insensitive) optionally followed by : = or whitespace, then the value
+          const pattern = new RegExp(esc + '\\s*[:=]?\\s*([A-Za-z0-9_\\-]+)', 'i');
+          const match = bodyText.match(pattern);
+          // Only store if the captured group is different from the keyword itself
+          if (match && match[1] && match[1].toLowerCase() !== keyword.toLowerCase()) {
+            results[keyword] = match[1];
+          }
+        });
+        return results;
+      },
+      args: [keywords]
+    });
+
+    return { results: injectionResults?.[0]?.result || {} };
+  } catch (error) {
+    console.log('Page scan unavailable:', error.message);
+    return { results: {} };
+  }
+}
 
 /**
  * Handle repository sync

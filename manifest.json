@@ -24,9 +24,8 @@
   "options_page": "src/ui/options.html",
   "permissions": [
     "storage",
-    "sidePanel"
-  ],
-  "optional_permissions": [
+    "sidePanel",
+    "scripting",
     "activeTab"
   ],
   "host_permissions": [
