@@ -505,6 +505,123 @@ function renderStepView() {
       searchInput.focus();
     };
   }
+
+  // Asynchronously enrich the step body with any ID values found on the active tab
+  enrichStepWithPageIds(articleContentScrollable).catch(err => {
+    console.log('Page ID enrichment skipped:', err.message);
+  });
+}
+
+/**
+ * Extract words that look like ID field names from a text string.
+ * Matches camelCase / PascalCase tokens ending with "ID" or "Id"
+ * (e.g. "customerID", "TerminalID", "AccountId").
+ * @param {string} text
+ * @returns {string[]} Deduplicated list of keyword tokens
+ */
+function extractIdKeywords(text) {
+  const keywords = new Set();
+  const matches = text.matchAll(/\b(\w+[Ii][Dd])\b/g);
+  for (const m of matches) keywords.add(m[1]);
+  return [...keywords];
+}
+
+/**
+ * Walk all text nodes inside `container`, and for each keyword present in
+ * `pageValues` inject a `.page-id-value` badge showing the found value.
+ * Example: "find customerID" → "find customerID [32109876]"
+ * @param {Element} container
+ * @param {Object} pageValues - { keyword: value } map
+ */
+function injectPageIdValues(container, pageValues) {
+  const keyList = Object.keys(pageValues);
+  if (keyList.length === 0) return;
+
+  // Pre-build a case-insensitive lookup map to avoid repeated find() calls
+  const keyMap = new Map(keyList.map(k => [k.toLowerCase(), k]));
+
+  const keyPattern = new RegExp(
+    '(' + keyList.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')',
+    'gi'
+  );
+
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  let node;
+  while ((node = walker.nextNode())) textNodes.push(node);
+
+  textNodes.forEach(textNode => {
+    const text = textNode.nodeValue;
+    keyPattern.lastIndex = 0;
+    if (!keyPattern.test(text)) return;
+    keyPattern.lastIndex = 0;
+
+    const frag = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match;
+
+    while ((match = keyPattern.exec(text)) !== null) {
+      // Guard against zero-length matches causing infinite loops
+      if (match.index === keyPattern.lastIndex) {
+        keyPattern.lastIndex++;
+        continue;
+      }
+
+      const keyword = match[0];
+      const key = keyMap.get(keyword.toLowerCase());
+      if (!key) continue;
+
+      if (match.index > lastIndex) {
+        frag.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+      frag.appendChild(document.createTextNode(keyword));
+
+      const badge = document.createElement('span');
+      badge.className = 'page-id-value';
+      badge.textContent = ' [' + pageValues[key] + ']';
+      frag.appendChild(badge);
+
+      lastIndex = match.index + keyword.length;
+    }
+
+    if (frag.childNodes.length > 0) {
+      if (lastIndex < text.length) {
+        frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+      }
+      textNode.parentNode.replaceChild(frag, textNode);
+    }
+  });
+}
+
+/**
+ * Enrich the rendered step content with ID values extracted from the active tab.
+ * Extracts ID keywords from visible step text, asks the service worker to scan
+ * the current page, then injects found values inline as [value] badges.
+ * @param {Element} container - The articleContentScrollable element
+ */
+async function enrichStepWithPageIds(container) {
+  if (!container) return;
+
+  const stepBody = container.querySelector('.step-view-step-body');
+  const stepTitle = container.querySelector('.step-view-step-title');
+  const allText = (stepTitle ? stepTitle.textContent : '') + ' ' +
+                  (stepBody ? stepBody.textContent : '');
+
+  const keywords = extractIdKeywords(allText);
+  if (keywords.length === 0) return;
+
+  let pageValues = {};
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'SCAN_PAGE', keywords });
+    pageValues = response && response.results ? response.results : {};
+  } catch (e) {
+    // Extension context may not support scanning (e.g. on restricted pages) – fail silently
+    return;
+  }
+
+  if (Object.keys(pageValues).length === 0) return;
+
+  injectPageIdValues(container, pageValues);
 }
 
 /**
