@@ -1179,134 +1179,75 @@ const Articles = {
     try {
       const lines = content.split('\n');
       let title = '';
-      let summary = '';
-      const steps = [];
-      let currentStep = null;
-      let currentStepContent = [];
-      let inStepSection = false;
-      let warnings = [];
-      
-      // Check for "Step N:" pattern in plain text
-      const isStepMarker = (line) => {
-        return /^Step\s+(\d+)\s*:\s*(.+)$/i.test(line.trim());
-      };
-      
-      const parseStepMarker = (line) => {
-        const match = line.trim().match(/^Step\s+(\d+)\s*:\s*(.+)$/i);
-        if (match) {
-          return { number: parseInt(match[1]), title: match[2].trim() };
-        }
-        return null;
-      };
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        // Parse title (first # heading)
-        if (!title && line.startsWith('# ')) {
-          title = line.substring(2).trim();
-          continue;
-        }
-        
-        // Check for "Step N:" marker in plain text (ServiceNow-style)
-        if (isStepMarker(line)) {
-          // Save previous step if exists
-          if (currentStep && currentStepContent.length > 0) {
-            currentStep.bodyHtml = this.markdownToHtml(currentStepContent.join('\n'));
-            steps.push(currentStep);
-          }
-          
-          // Start new step
-          const stepInfo = parseStepMarker(line);
-          currentStep = {
-            title: `Step ${stepInfo.number}: ${stepInfo.title}`,
-            bodyHtml: '',
-            images: []
-          };
-          currentStepContent = [];
-          inStepSection = true;
-          continue;
-        }
-        
-        // Parse step headings (## Step: ...)
-        if (line.match(/^##\s+Step:/i)) {
-          // Save previous step if exists
-          if (currentStep && currentStepContent.length > 0) {
-            currentStep.bodyHtml = this.markdownToHtml(currentStepContent.join('\n'));
-            steps.push(currentStep);
-          }
-          
-          // Start new step
-          const stepTitle = line.substring(2).replace(/^Step:\s*/i, '').trim();
-          currentStep = {
-            title: stepTitle,
-            bodyHtml: '',
-            images: []
-          };
-          currentStepContent = [];
-          inStepSection = true;
-          continue;
-        }
-        
-        // Handle other ## headings as steps
-        if (line.startsWith('## ')) {
-          // Save previous step if exists
-          if (currentStep && currentStepContent.length > 0) {
-            currentStep.bodyHtml = this.markdownToHtml(currentStepContent.join('\n'));
-            steps.push(currentStep);
-          }
-          
-          // Start new step
-          const stepTitle = line.substring(3).trim();
-          currentStep = {
-            title: stepTitle,
-            bodyHtml: '',
-            images: []
-          };
-          currentStepContent = [];
-          inStepSection = true;
-          continue;
-        }
-        
-        // Collect content
-        if (inStepSection && currentStep) {
-          currentStepContent.push(line);
-        } else if (!inStepSection && title && line) {
-          // Content before first step becomes summary
-          if (!summary) {
-            summary = line;
-          }
-        }
-      }
-      
-      // Save last step
-      if (currentStep && currentStepContent.length > 0) {
-        currentStep.bodyHtml = this.markdownToHtml(currentStepContent.join('\n'));
-        steps.push(currentStep);
-      }
-      
-      // Use fallback title if no title found
-      if (!title) {
+
+      // Parse title from first # heading, remove it from body lines
+      const h1Idx = lines.findIndex(l => /^#\s+/.test(l.trim()));
+      let bodyLines;
+      if (h1Idx >= 0) {
+        title = lines[h1Idx].trim().replace(/^#+\s*/, '');
+        bodyLines = lines.filter((_, i) => i !== h1Idx);
+      } else {
         title = fallbackTitle || 'Untitled Article';
+        bodyLines = lines;
       }
-      
-      // If no steps found, create a single-step fallback
+
+      // Convert body to HTML and parse into DOM for step segmentation
+      const bodyHtml = this.markdownToHtml(bodyLines.join('\n'));
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(bodyHtml, 'text/html');
+
+      // Extract summary from first paragraph
+      let summary = '';
+      const firstP = doc.querySelector('p');
+      if (firstP) {
+        summary = firstP.textContent.trim();
+      }
+
+      // Try ServiceNow-style "Step N:" segmentation first
+      let steps = this.segmentIntoSteps(doc);
+
+      // Fallback 1: Use <h2> headings as step boundaries
       if (steps.length === 0) {
-        // Use all content as a single step
-        const bodyHtml = this.markdownToHtml(content);
+        const h2Elements = doc.querySelectorAll('h2');
+        if (h2Elements.length > 0) {
+          h2Elements.forEach(h2 => {
+            // Strip "Step: " prefix for compatibility with legacy "## Step: Title" convention
+            const stepTitle = h2.textContent.trim().replace(/^Step:\s*/i, '');
+            const stepContent = this.getContentUntilNextHeading(h2);
+            const images = [];
+            const imgElements = stepContent.querySelectorAll('img');
+            imgElements.forEach(img => {
+              const src = img.getAttribute('src') || '';
+              const alt = img.getAttribute('alt') || '';
+              const sanitizedSrc = this.sanitizeImageUrl(src);
+              if (sanitizedSrc) {
+                images.push({ alt, dataUrlOrRemoteUrl: sanitizedSrc });
+                img.setAttribute('src', sanitizedSrc);
+              } else {
+                img.remove();
+              }
+            });
+            const sanitized = this.sanitizeHtmlContent(stepContent);
+            steps.push({ title: stepTitle, bodyHtml: sanitized.innerHTML, images });
+          });
+        }
+      }
+
+      // Fallback 2: No steps found, create a single-step article
+      if (steps.length === 0) {
         steps.push({
           title: 'Procedure',
           bodyHtml: bodyHtml,
           images: []
         });
       }
-      
+
       // Add index to all steps
       const indexedSteps = steps.map((step, index) => ({
         index: index + 1,
         ...step
       }));
-      
+
       return {
         ok: true,
         article: {
@@ -1816,27 +1757,58 @@ const Articles = {
    */
   markdownToHtml(markdown) {
     const lines = markdown.split('\n');
-    let inList = false;
+    let listType = null; // 'ul' or 'ol'
     const processedLines = [];
     
     for (let line of lines) {
       const trimmed = line.trim();
       
-      // Handle list items
+      // Handle headings
+      if (trimmed.startsWith('### ')) {
+        if (listType) { processedLines.push(`</${listType}>`); listType = null; }
+        processedLines.push(`<h3>${this.processInlineMarkdown(trimmed.substring(4))}</h3>`);
+        continue;
+      }
+      if (trimmed.startsWith('## ')) {
+        if (listType) { processedLines.push(`</${listType}>`); listType = null; }
+        processedLines.push(`<h2>${this.processInlineMarkdown(trimmed.substring(3))}</h2>`);
+        continue;
+      }
+      if (trimmed.startsWith('# ')) {
+        if (listType) { processedLines.push(`</${listType}>`); listType = null; }
+        processedLines.push(`<h1>${this.processInlineMarkdown(trimmed.substring(2))}</h1>`);
+        continue;
+      }
+      
+      // Handle unordered list items (- or *)
       if (trimmed.match(/^[-*]\s+/)) {
-        if (!inList) {
+        if (listType !== 'ul') {
+          if (listType) processedLines.push(`</${listType}>`);
           processedLines.push('<ul>');
-          inList = true;
+          listType = 'ul';
         }
         const content = this.processInlineMarkdown(trimmed.substring(2));
         processedLines.push(`<li>${content}</li>`);
         continue;
       }
       
+      // Handle ordered list items (1. 2. etc.)
+      const orderedMatch = trimmed.match(/^\d+\.\s+(.+)/);
+      if (orderedMatch) {
+        if (listType !== 'ol') {
+          if (listType) processedLines.push(`</${listType}>`);
+          processedLines.push('<ol>');
+          listType = 'ol';
+        }
+        const content = this.processInlineMarkdown(orderedMatch[1]);
+        processedLines.push(`<li>${content}</li>`);
+        continue;
+      }
+      
       // Close list if needed
-      if (inList) {
-        processedLines.push('</ul>');
-        inList = false;
+      if (listType) {
+        processedLines.push(`</${listType}>`);
+        listType = null;
       }
       
       // Process line
@@ -1847,8 +1819,8 @@ const Articles = {
     }
     
     // Close list if still open
-    if (inList) {
-      processedLines.push('</ul>');
+    if (listType) {
+      processedLines.push(`</${listType}>`);
     }
     
     return processedLines.join('\n');
@@ -1969,12 +1941,13 @@ const Articles = {
       return null;
     };
     
-    // Helper: Check if text is a chapter/section heading (not a step)
-    const isChapterHeading = (text) => {
-      // Be specific: only match patterns like "Chapter 1:", "Chapter 2: Title", or numbered sections like "1. General info"
-      // Must have "Chapter" keyword OR be a single digit followed by period and capital letter
+    // Helper: Check if element is a chapter/section heading (not a step)
+    // Only applied to actual heading elements (H1-H6), not to paragraphs,
+    // to avoid false-positives on numbered action items like "1. Open the page..."
+    const isChapterHeading = (node, text) => {
+      if (!/^H[1-6]$/.test(node.tagName)) return false;
       return /^Chapter\s+\d+(\s*:|$)/i.test(text) ||
-             /^\d+\.\s+[A-Z][A-Za-z\s]{2,}$/i.test(text); // At least 3 characters after number to avoid matching "1. Go"
+             /^\d+\.\s/.test(text); // "1. Section title" style numbered headings
     };
     
     // Helper: Check if element or text starts with action verbs
@@ -1990,6 +1963,12 @@ const Articles = {
     // Helper: Check if text starts with "Note:"
     const isNote = (text) => {
       return /^Note:\s*/i.test(text.trim());
+    };
+    
+    // Helper: Check if text is a numbered/lettered list item (e.g. "1. xxx", "1) xxx", "a) xxx")
+    // These should become individual substeps rather than being attached to a previous substep
+    const isNumberedItem = (text) => {
+      return /^\d+[.)]\s+\S/.test(text.trim()) || /^[a-z][)]\s+\S/i.test(text.trim());
     };
     
     // Helper: Extract images from an element
@@ -2058,8 +2037,8 @@ const Articles = {
           title: stepInfo.title,
           nodes: []
         };
-      } else if (currentPrimary && !isChapterHeading(text)) {
-        // Add to current primary step (skip chapter headings)
+      } else if (currentPrimary && !isChapterHeading(node, text)) {
+        // Add to current primary step (skip chapter/section headings)
         currentPrimary.nodes.push(node);
       }
     }
@@ -2133,6 +2112,19 @@ const Articles = {
               prev.bodyHtml += '\n' + sanitized.innerHTML;
               prev.images.push(...images);
             }
+            i++;
+            continue;
+          }
+          
+          // Numbered/lettered item (e.g. "1. Open...", "a) Click..."): create individual substep
+          if (isNumberedItem(text)) {
+            const substepContent = document.createElement('div');
+            substepContent.appendChild(node.cloneNode(true));
+            const images = extractImages(substepContent);
+            const sanitized = this.sanitizeHtmlContent(substepContent);
+            
+            const label = truncateLabel(text);
+            substeps.push(createStep(primary.number, primary.title, label, sanitized.innerHTML, images));
             i++;
             continue;
           }
