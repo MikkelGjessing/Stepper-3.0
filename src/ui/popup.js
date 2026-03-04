@@ -442,30 +442,6 @@ function renderStepView() {
       <h3 class="step-view-step-title">${escapeHtml(displayTitle)}</h3>
       <div class="step-view-step-body">
         ${sanitizeHtml(currentStep.bodyHtml)}
-        
-        ${currentStep.images && currentStep.images.length > 0 ? `
-          <div class="step-images">
-            ${currentStep.images.map(img => {
-              const url = img.dataUrlOrRemoteUrl || '';
-              const isValidUrl = url.startsWith('data:image/') || url.startsWith('https://') || url.startsWith('http://');
-              
-              if (!isValidUrl) {
-                return `<div class="image-alt-text">📷 ${escapeHtml(img.alt || 'Invalid image URL')}</div>`;
-              }
-              
-              return `
-                <img 
-                  src="${escapeHtml(url)}" 
-                  alt="${escapeHtml(img.alt || 'Step image')}"
-                  onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
-                />
-                <div class="image-alt-text" style="display: none;">
-                  📷 ${escapeHtml(img.alt || 'Image not available')}
-                </div>
-              `;
-            }).join('')}
-          </div>
-        ` : ''}
       </div>
     </div>
   `;
@@ -652,31 +628,6 @@ function renderFullArticleView() {
         </div>
         <div class="full-article-step-body">
           ${sanitizeHtml(step.bodyHtml)}
-          
-          ${step.images && step.images.length > 0 ? `
-            <div class="step-images">
-              ${step.images.map(img => {
-                // Validate image URL - only allow data: URLs and https/http URLs
-                const url = img.dataUrlOrRemoteUrl || '';
-                const isValidUrl = url.startsWith('data:image/') || url.startsWith('https://') || url.startsWith('http://');
-                
-                if (!isValidUrl) {
-                  return `<div class="image-alt-text">📷 ${escapeHtml(img.alt || 'Invalid image URL')}</div>`;
-                }
-                
-                return `
-                  <img 
-                    src="${escapeHtml(url)}" 
-                    alt="${escapeHtml(img.alt || 'Step image')}"
-                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
-                  />
-                  <div class="image-alt-text" style="display: none;">
-                    📷 ${escapeHtml(img.alt || 'Image not available')}
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          ` : ''}
         </div>
       </div>
     `;

@@ -4,6 +4,10 @@
   box-sizing: border-box;
 }
 
+html, body {
+  overflow-x: hidden;
+}
+
 body {
   background: #1a1a1a;
   color: #fff;
@@ -43,7 +47,7 @@ body {
 
 #viewerImg {
   display: block;
-  max-width: 100%;
-  max-height: 90vh;
+  max-width: 95vw;
+  max-height: 95vh;
   object-fit: contain;
 }

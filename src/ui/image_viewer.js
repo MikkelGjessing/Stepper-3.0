@@ -6,7 +6,8 @@
 
   /**
    * Display the image at the given src.
-   * Default size: 75 % of natural dimensions, scaled down to fit the viewport.
+   * Default size: 100% of natural dimensions, scaled down only if it would
+   * exceed 95vw or 95vh (object-fit: contain, aspect-ratio preserved).
    */
   function displayImage(src, alt) {
     const img = document.getElementById('viewerImg');
@@ -20,13 +21,13 @@
       const nH = img.naturalHeight;
       if (!nW || !nH) return;
 
-      // Target: 75 % of natural size
-      let targetW = nW * 0.75;
-      let targetH = nH * 0.75;
+      // Target: 100% of natural size
+      let targetW = nW;
+      let targetH = nH;
 
-      // Constrain to viewport (leave room for close button + padding)
-      const maxW = window.innerWidth - 40;
-      const maxH = window.innerHeight - 100;
+      // Constrain to 95% of the viewport, preserving aspect ratio
+      const maxW = window.innerWidth * 0.95;
+      const maxH = window.innerHeight * 0.95;
       if (targetW > maxW || targetH > maxH) {
         const scale = Math.min(maxW / targetW, maxH / targetH);
         targetW = Math.round(targetW * scale);
