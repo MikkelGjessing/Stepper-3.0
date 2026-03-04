@@ -79,28 +79,8 @@ function setupEventListeners() {
     showNotification('Articles refreshed');
   });
 
-  // Image modal close handlers
-  const imageModalBackdrop = document.getElementById('imageModalBackdrop');
-  if (imageModalBackdrop) {
-    imageModalBackdrop.addEventListener('click', closeImageModal);
-  }
-  const imageModalClose = document.getElementById('imageModalClose');
-  if (imageModalClose) {
-    imageModalClose.addEventListener('click', closeImageModal);
-  }
-
   // Keyboard navigation for ARTICLE mode
   document.addEventListener('keydown', (e) => {
-    // Close image modal on ESC regardless of UI state
-    if (e.key === 'Escape') {
-      const modal = document.getElementById('imageModal');
-      if (modal && modal.style.display !== 'none') {
-        closeImageModal();
-        e.preventDefault();
-        return;
-      }
-    }
-
     if (currentUIState !== UI_STATE.ARTICLE) return;
     const target = e.target;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
@@ -953,7 +933,9 @@ function sanitizeHtml(html) {
 
 /**
  * Wraps all <img> elements inside a container with a compact thumbnail preview
- * and attaches click/keyboard handlers to open the modal viewer.
+ * and attaches click/keyboard handlers to open the image viewer tab.
+ * Idempotent: images already wrapped are skipped via .image-preview ancestor
+ * check and data-previewized attribute.
  */
 function wrapImagesWithPreview(container) {
   if (!container) return;
@@ -971,6 +953,7 @@ function wrapImagesWithPreview(container) {
     preview.setAttribute('role', 'button');
     preview.setAttribute('tabindex', '0');
     preview.setAttribute('aria-label', 'Click to display image');
+    preview.dataset.previewized = 'true';
 
     // Thumbnail image (reuse original src, lazy-load)
     const thumb = document.createElement('img');
@@ -987,18 +970,18 @@ function wrapImagesWithPreview(container) {
     overlay.className = 'image-overlay';
     overlay.textContent = 'Click to display image';
 
-    // Replace original img with preview container
-    img.parentNode.insertBefore(preview, img);
     preview.appendChild(thumb);
     preview.appendChild(overlay);
-    img.remove();
 
-    // Open modal on click or Enter key
-    const openModal = () => openImageModal(src, alt);
-    preview.addEventListener('click', openModal);
+    // Replace original img with preview container (removes original from DOM)
+    img.replaceWith(preview);
+
+    // Open image viewer tab on click or Enter key
+    const openViewer = () => openImageViewer(src, alt);
+    preview.addEventListener('click', openViewer);
     preview.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        openModal();
+        openViewer();
         e.preventDefault();
       }
     });
@@ -1006,65 +989,19 @@ function wrapImagesWithPreview(container) {
 }
 
 /**
- * Open the image modal viewer with the given image src and alt text.
- * Sizes the image to 75% of its natural dimensions, constrained to 75vw × 75vh.
+ * Open the image in a dedicated viewer tab so it can display outside the
+ * side-panel column without any size constraints.
+ * The image src is stashed in chrome.storage.session (keyed by a unique id)
+ * to support arbitrarily-large data URLs that would overflow a query string.
  */
-function openImageModal(src, alt) {
-  const modal = document.getElementById('imageModal');
-  const modalImg = document.getElementById('imageModalImg');
-  if (!modal || !modalImg) return;
-
-  // Reset any previously-set inline size
-  modalImg.style.width = '';
-  modalImg.style.height = '';
-  modalImg.alt = alt || '';
-  modalImg.src = src;
-
-  // Compute and apply target size once natural dimensions are known
-  const applySize = () => {
-    const nW = modalImg.naturalWidth;
-    const nH = modalImg.naturalHeight;
-    if (!nW || !nH) return;
-
-    let finalW = nW * 0.75;
-    let finalH = nH * 0.75;
-
-    // Constrain to 75vw × 75vh (keeping aspect ratio)
-    const maxW = window.innerWidth * 0.75;
-    const maxH = window.innerHeight * 0.75;
-    if (finalW > maxW || finalH > maxH) {
-      const scale = Math.min(maxW / finalW, maxH / finalH);
-      finalW = Math.round(finalW * scale);
-      finalH = Math.round(finalH * scale);
-    }
-
-    modalImg.style.width = finalW + 'px';
-    modalImg.style.height = finalH + 'px';
-  };
-
-  if (modalImg.complete && modalImg.naturalWidth) {
-    applySize();
-  } else {
-    modalImg.onload = applySize;
-  }
-
-  modal.style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-}
-
-/**
- * Close the image modal viewer.
- */
-function closeImageModal() {
-  const modal = document.getElementById('imageModal');
-  if (!modal) return;
-  modal.style.display = 'none';
-  document.body.style.overflow = '';
-  const modalImg = document.getElementById('imageModalImg');
-  if (modalImg) {
-    modalImg.src = '';
-    modalImg.style.width = '';
-    modalImg.style.height = '';
-    modalImg.onload = null;
-  }
+function openImageViewer(src, alt) {
+  const key = 'imgViewer_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+  chrome.storage.session.set({ [key]: { src, alt } }, () => {
+    const viewerUrl = chrome.runtime.getURL('src/ui/image_viewer.html') +
+      '?key=' + encodeURIComponent(key);
+    chrome.tabs.create({ url: viewerUrl }).catch(() => {
+      // Fallback: open as popup window
+      chrome.windows.create({ url: viewerUrl, type: 'popup', width: 1100, height: 800 });
+    });
+  });
 }
