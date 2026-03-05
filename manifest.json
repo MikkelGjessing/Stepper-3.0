@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Stepper 3.0 - Step-by-Step Guide Assistant",
+  "name": "Stepper - Step-by-Step Guide Assistant",
   "version": "1.0.0",
   "description": "Internal step-by-step guide assistant for IT agents",
   "icons": {
