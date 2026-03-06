@@ -28,6 +28,19 @@ const syncRepoBtn = document.getElementById('syncRepoBtn');
 const syncStatus = document.getElementById('syncStatus');
 const repoArticlesCount = document.getElementById('repoArticlesCount');
 
+// ServiceNow DOM elements
+const snEnabled = document.getElementById('snEnabled');
+const snFields = document.getElementById('snFields');
+const snBaseUrl = document.getElementById('snBaseUrl');
+const snFilter = document.getElementById('snFilter');
+const snUsername = document.getElementById('snUsername');
+const snPassword = document.getElementById('snPassword');
+const snAutoSync = document.getElementById('snAutoSync');
+const snTestBtn = document.getElementById('snTestBtn');
+const snExtractBtn = document.getElementById('snExtractBtn');
+const snStatus = document.getElementById('snStatus');
+const snInfo = document.getElementById('snInfo');
+
 // Form field IDs
 const formFields = {
   repoUrl: document.getElementById('repoUrl'),
@@ -47,6 +60,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
   await updateUploadedArticlesCount();
   await updateRepoArticlesCount();
+  await updateSnInfo();
   setupEventListeners();
 });
 
@@ -58,6 +72,11 @@ function setupEventListeners() {
   
   // LLM toggle
   formFields.enableLLMSearch.addEventListener('change', toggleLLMSection);
+
+  // ServiceNow toggle
+  snEnabled.addEventListener('change', toggleSnFields);
+  snTestBtn.addEventListener('click', handleSnTest);
+  snExtractBtn.addEventListener('click', handleSnExtract);
   
   // Form submission
   settingsForm.addEventListener('submit', handleSaveSettings);
@@ -108,6 +127,19 @@ async function loadSettings() {
     formFields.llmEndpoint.value = settings.llmEndpoint || '';
     formFields.llmApiKey.value = settings.llmApiKey || '';
     formFields.llmModel.value = settings.llmModel || 'gpt-3.5-turbo';
+
+    // Load ServiceNow settings (use defaults if absent)
+    const defaults = typeof defaultServiceNowSettings === 'function'
+      ? defaultServiceNowSettings()
+      : {};
+    const sn = { ...defaults, ...(settings.serviceNow || {}) };
+    snEnabled.checked = sn.enabled !== false;
+    snBaseUrl.value = sn.baseUrl || '';
+    snFilter.value = sn.filter || '';
+    snUsername.value = sn.username || '';
+    snPassword.value = sn.password || '';
+    snAutoSync.checked = sn.autoSyncWeekly !== false;
+    toggleSnFields();
     
     toggleLLMSection();
     
@@ -115,6 +147,11 @@ async function loadSettings() {
     console.error('Error loading settings:', error);
     showStatus('Failed to load settings', 'error');
   }
+}
+
+// Toggle ServiceNow fields visibility based on enabled checkbox
+function toggleSnFields() {
+  snFields.style.display = snEnabled.checked ? 'block' : 'none';
 }
 
 // Toggle source type fields
@@ -148,7 +185,11 @@ async function handleSaveSettings(event) {
   try {
     saveBtn.disabled = true;
     saveBtn.textContent = '💾 Saving...';
-    
+
+    // Preserve existing serviceNow metadata fields that are not in the form
+    const existingSettings = await Storage.getSettings();
+    const existingSn = existingSettings.serviceNow || {};
+
     const settings = {
       repoSourceType: sourceTypeAzure.checked ? 'azure' : 'url',
       repoUrl: formFields.repoUrl.value.trim(),
@@ -159,7 +200,17 @@ async function handleSaveSettings(event) {
       enablePageScanning: formFields.enablePageScanning.checked,
       llmEndpoint: formFields.llmEndpoint.value.trim(),
       llmApiKey: formFields.llmApiKey.value.trim(),
-      llmModel: formFields.llmModel.value.trim() || 'gpt-3.5-turbo'
+      llmModel: formFields.llmModel.value.trim() || 'gpt-3.5-turbo',
+      serviceNow: {
+        ...existingSn,
+        enabled: snEnabled.checked,
+        baseUrl: snBaseUrl.value.trim(),
+        filter: snFilter.value.trim(),
+        username: snUsername.value.trim(),
+        // Keep existing password if field is empty (not changed)
+        password: snPassword.value || existingSn.password || '',
+        autoSyncWeekly: snAutoSync.checked
+      }
     };
     
     // Optional format validation (only if values are provided)
@@ -218,7 +269,10 @@ async function handleResetToDefaults() {
       llmEndpoint: '',
       llmApiKey: '',
       llmModel: 'gpt-3.5-turbo',
-      enablePageScanning: false
+      enablePageScanning: false,
+      serviceNow: typeof defaultServiceNowSettings === 'function'
+        ? defaultServiceNowSettings()
+        : {}
     };
     
     const success = await Storage.setSettings(defaultSettings);
@@ -272,6 +326,11 @@ function validateFormats(settings) {
   // Only validate LLM endpoint format if provided
   if (settings.llmEndpoint && !isValidUrl(settings.llmEndpoint)) {
     return 'Invalid LLM endpoint URL format';
+  }
+
+  // Only validate ServiceNow Base URL format if provided
+  if (settings.serviceNow && settings.serviceNow.baseUrl && !isValidUrl(settings.serviceNow.baseUrl)) {
+    return 'Invalid ServiceNow Base URL format';
   }
   
   return null; // No validation errors
@@ -436,6 +495,153 @@ function handleImport() {
   
   input.click();
 }
+
+// ── ServiceNow handlers ────────────────────────────────────────────────────
+
+/**
+ * Collect ServiceNow settings from the form (without saving to storage).
+ * Used by Test Connection so the user can test unsaved values.
+ */
+function collectSnSettingsFromForm() {
+  return {
+    enabled: snEnabled.checked,
+    baseUrl: snBaseUrl.value.trim(),
+    filter: snFilter.value.trim(),
+    username: snUsername.value.trim(),
+    // Note: password value intentionally not logged anywhere
+    password: snPassword.value,
+    autoSyncWeekly: snAutoSync.checked
+  };
+}
+
+/** Test connection using currently typed (unsaved) field values */
+async function handleSnTest() {
+  const snSettings = collectSnSettingsFromForm();
+
+  if (!snSettings.baseUrl) {
+    showSnStatus('Please enter a Base URL', 'error');
+    return;
+  }
+
+  // Warn if credentials still contain placeholder values
+  if (
+    snSettings.username === '__SERVICENOW_USERNAME__' ||
+    snSettings.password === '__SERVICENOW_PASSWORD__'
+  ) {
+    showSnStatus('⚠ Update username/password before testing – placeholder values are still set', 'error');
+    return;
+  }
+
+  snTestBtn.disabled = true;
+  snTestBtn.textContent = '⏳ Testing…';
+  showSnStatus('Testing connection…', 'info');
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'TEST_SERVICENOW',
+      settings: snSettings
+    });
+
+    if (response && response.success) {
+      showSnStatus('✓ ' + response.message, 'success');
+    } else {
+      showSnStatus('✗ ' + (response ? response.message : 'No response from service worker'), 'error');
+    }
+  } catch (err) {
+    console.error('Error testing ServiceNow connection:', err);
+    showSnStatus('Failed to test connection: ' + err.message, 'error');
+  } finally {
+    snTestBtn.disabled = false;
+    snTestBtn.textContent = '🔌 Test Connection';
+  }
+}
+
+/** Extract (sync) articles from ServiceNow using stored settings */
+async function handleSnExtract() {
+  // Check stored settings for placeholder credentials before starting
+  const storedSettings = await Storage.getSettings();
+  const storedSn = storedSettings.serviceNow || {};
+  if (
+    storedSn.username === '__SERVICENOW_USERNAME__' ||
+    storedSn.password === '__SERVICENOW_PASSWORD__'
+  ) {
+    showSnStatus('⚠ Update and save real username/password before extracting – placeholder values are still set', 'error');
+    return;
+  }
+
+  snExtractBtn.disabled = true;
+  snExtractBtn.textContent = '⏳ Syncing…';
+  showSnStatus('Syncing articles from ServiceNow…', 'info');
+
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'SYNC_SERVICENOW' });
+
+    if (response && response.success) {
+      showSnStatus('✓ ' + response.message, 'success');
+      await updateSnInfo();
+    } else {
+      showSnStatus('✗ ' + (response ? response.message : 'No response from service worker'), 'error');
+    }
+  } catch (err) {
+    console.error('Error extracting ServiceNow articles:', err);
+    showSnStatus('Failed to extract: ' + err.message, 'error');
+  } finally {
+    snExtractBtn.disabled = false;
+    snExtractBtn.textContent = '⬇️ Extract Now';
+  }
+}
+
+/** Show a status message in the ServiceNow status area */
+let _snStatusTimer = null;
+function showSnStatus(message, type = 'info') {
+  // Clear any previously scheduled auto-clear
+  if (_snStatusTimer !== null) {
+    clearTimeout(_snStatusTimer);
+    _snStatusTimer = null;
+  }
+  snStatus.textContent = message;
+  snStatus.style.color =
+    type === 'success' ? '#28a745' :
+    type === 'error'   ? '#dc3545' :
+    '#666';
+  snStatus.style.fontWeight = '500';
+
+  // Auto-clear after 10 s
+  _snStatusTimer = setTimeout(() => {
+    snStatus.textContent = '';
+    _snStatusTimer = null;
+  }, 10000);
+}
+
+/** Refresh the ServiceNow info area (last sync time, article count, last error) */
+async function updateSnInfo() {
+  try {
+    const settings = await Storage.getSettings();
+    const sn = settings.serviceNow || {};
+
+    const allArticles = await Storage.getArticles();
+    const count = allArticles.filter(a => a.source === 'servicenow' && !a.stale).length;
+
+    const parts = [];
+    if (sn.lastSyncAt) {
+      const d = new Date(sn.lastSyncAt);
+      parts.push(`Last sync: ${d.toLocaleString()}`);
+    } else {
+      parts.push('Last sync: never');
+    }
+    parts.push(`Articles stored: ${count}`);
+    if (sn.lastError) {
+      parts.push(`⚠ Last error: ${sn.lastError}`);
+    }
+
+    snInfo.textContent = parts.join(' · ');
+  } catch (err) {
+    console.error('Error updating ServiceNow info:', err);
+    snInfo.textContent = '';
+  }
+}
+
+// ── End ServiceNow handlers ────────────────────────────────────────────────
 
 // Show status message
 function showStatus(message, type = 'info') {

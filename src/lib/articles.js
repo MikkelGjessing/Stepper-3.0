@@ -2332,6 +2332,133 @@ const Articles = {
   },
 
   /**
+   * Import/upsert ServiceNow Knowledge articles into local storage.
+   *
+   * Each raw ServiceNow article is mapped into the extension Article schema
+   * and run through segmentIntoSteps() so it gets the same step-by-step
+   * format as HTML/DOCX imports.
+   *
+   * Storage rules
+   * • Upsert by remoteId (sys_id or kb_number) – repeated syncs update.
+   * • Locally-uploaded articles are never touched.
+   * • Articles present in the previous sync but absent now are marked stale=true
+   *   rather than deleted (soft-delete; a hard-delete policy can be added later).
+   *
+   * @param {Array}  rawArticles  Array of raw ServiceNow article objects
+   * @param {string} syncedAt     ISO timestamp of this sync run
+   * @returns {Promise<{upserted:number, stale:number, errors:string[]}>}
+   */
+  async importServiceNowArticles(rawArticles, syncedAt) {
+    const errors = [];
+    const processed = [];
+    const syncedRemoteIds = new Set();
+
+    for (const raw of rawArticles) {
+      try {
+        // Resolve the best available identifier
+        const remoteId = raw.sys_id || raw.kb_number || raw.number || null;
+        const title =
+          raw.short_description || raw.title || raw.name || '(Untitled)';
+
+        // Build HTML body from available fields, prefer text_html / wiki / text
+        const rawHtml =
+          raw.text_html || raw.wiki || raw.text ||
+          raw.description || raw.body || raw.content || '';
+
+        // Sanitize then segment into steps using the existing pipeline
+        const safeHtml = typeof this.sanitizeHtmlContent === 'function'
+          ? this.sanitizeHtmlContent(rawHtml)
+          : rawHtml;
+
+        const steps = this.segmentIntoSteps(safeHtml, title);
+
+        const article = {
+          // Stable ID: reuse existing record if present, else create new UUID
+          id: null,           // resolved below during upsert
+          title,
+          summary: raw.meta_description || raw.description || '',
+          tags: raw.kb_category
+            ? [raw.kb_category]
+            : (raw.topic ? [raw.topic] : []),
+          estimatedMinutes: null,
+          steps,
+          source: 'servicenow',
+          remoteId,
+          syncedAt,
+          stale: false,
+          createdAt: raw.sys_created_on || syncedAt,
+          updatedAt: syncedAt
+        };
+
+        processed.push(article);
+        if (remoteId) syncedRemoteIds.add(remoteId);
+      } catch (err) {
+        errors.push(`Failed to process article "${raw.short_description || raw.sys_id}": ${err.message}`);
+      }
+    }
+
+    // Load existing articles from storage
+    const allArticles = await Storage.getArticles();
+    let upsertedCount = 0;
+
+    // Build a map of remoteId → existing article for fast lookup
+    const existingByRemoteId = new Map();
+    for (const a of allArticles) {
+      if (a.source === 'servicenow' && a.remoteId) {
+        existingByRemoteId.set(a.remoteId, a);
+      }
+    }
+
+    // Upsert processed articles
+    const upsertedIds = new Set();
+    for (const article of processed) {
+      const existing = article.remoteId ? existingByRemoteId.get(article.remoteId) : null;
+      if (existing) {
+        // Update in-place
+        article.id = existing.id;
+        article.createdAt = existing.createdAt;
+        const idx = allArticles.findIndex(a => a.id === existing.id);
+        if (idx !== -1) allArticles[idx] = article;
+      } else {
+        article.id = this.generateUUID();
+        allArticles.push(article);
+      }
+      upsertedIds.add(article.id);
+      upsertedCount++;
+    }
+
+    // Mark previously-synced ServiceNow articles that are absent from this feed as stale
+    let staleCount = 0;
+    for (const a of allArticles) {
+      if (
+        a.source === 'servicenow' &&
+        !upsertedIds.has(a.id) &&
+        !a.stale
+      ) {
+        a.stale = true;
+        staleCount++;
+      }
+    }
+
+    await Storage.setArticles(allArticles);
+
+    return { upserted: upsertedCount, stale: staleCount, errors };
+  },
+
+  /**
+   * Return the count of ServiceNow articles in storage.
+   * @returns {Promise<number>}
+   */
+  async getServiceNowArticlesCount() {
+    try {
+      const articles = await Storage.getArticles();
+      return articles.filter(a => a.source === 'servicenow' && !a.stale).length;
+    } catch {
+      return 0;
+    }
+  },
+
+  /**
    * Dev helper: Log step extraction info for debugging
    * Usage: Articles.logStepInfo(article)
    * @param {Object} article - Article object

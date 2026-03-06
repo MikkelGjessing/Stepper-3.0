@@ -26,10 +26,12 @@
     "storage",
     "sidePanel",
     "scripting",
-    "activeTab"
+    "activeTab",
+    "alarms"
   ],
   "host_permissions": [
     "https://*/*",
-    "http://*/*"
+    "http://*/*",
+    "https://nets.service-now.com/*"
   ]
 }

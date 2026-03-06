@@ -15,6 +15,85 @@
 
     <main class="content">
       <form id="settingsForm">
+        <!-- ServiceNow Knowledge Sync Section -->
+        <section class="settings-section">
+          <h2 class="section-title">❄️ ServiceNow Knowledge Sync</h2>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="snEnabled" class="checkbox">
+              <span>Enable ServiceNow sync</span>
+            </label>
+            <span class="help-text">Fetch articles from ServiceNow Knowledge Management API</span>
+          </div>
+
+          <div id="snFields">
+            <div class="form-group">
+              <label class="label" for="snBaseUrl">Base URL</label>
+              <input
+                type="url"
+                id="snBaseUrl"
+                class="input"
+                placeholder="https://instance.service-now.com/api/sn_km_api/knowledge/articles"
+              />
+              <span class="help-text">ServiceNow Knowledge Management REST API endpoint (requires sn_km_api plugin)</span>
+            </div>
+
+            <div class="form-group">
+              <label class="label" for="snFilter">Filter (sysparm_query)</label>
+              <input
+                type="text"
+                id="snFilter"
+                class="input"
+                placeholder="workflow_state=published^sys_view_count>100"
+              />
+              <span class="help-text">ServiceNow query filter applied when fetching articles</span>
+            </div>
+
+            <div class="form-group">
+              <label class="label" for="snUsername">Username</label>
+              <input
+                type="text"
+                id="snUsername"
+                class="input"
+                autocomplete="username"
+                placeholder="ServiceNow username"
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="label" for="snPassword">Password</label>
+              <input
+                type="password"
+                id="snPassword"
+                class="input"
+                autocomplete="new-password"
+                placeholder="ServiceNow password"
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="snAutoSync" class="checkbox">
+                <span>Auto-sync weekly</span>
+              </label>
+              <span class="help-text">Automatically refresh articles once per week in the background</span>
+            </div>
+
+            <div class="button-group">
+              <button type="button" class="btn btn-secondary" id="snTestBtn">
+                🔌 Test Connection
+              </button>
+              <button type="button" class="btn btn-primary" id="snExtractBtn">
+                ⬇️ Extract Now
+              </button>
+            </div>
+
+            <div id="snStatus" style="margin-top: 10px;"></div>
+            <div id="snInfo" style="margin-top: 6px; color: #666; font-size: 13px;"></div>
+          </div>
+        </section>
+
         <!-- Repository Source Section -->
         <section class="settings-section">
           <h2 class="section-title">📚 Repository Source</h2>

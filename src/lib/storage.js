@@ -3,6 +3,34 @@
  * Provides defensive access to extension storage
  */
 
+/**
+ * Default ServiceNow Knowledge sync settings.
+ * Edit this object to rotate credentials or change the default endpoint/filter.
+ *
+ * ── WHERE TO CHANGE DEFAULTS ──────────────────────────────────────────────────
+ *   baseUrl  : ServiceNow Knowledge API endpoint (sn_km_api plugin required)
+ *   filter   : sysparm_query filter string (URL-encoded in the fetch call)
+ *   username : ServiceNow basic-auth username  ← rotate here
+ *   password : ServiceNow basic-auth password  ← rotate here
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+function defaultServiceNowSettings() {
+  return {
+    enabled: true,
+    // ServiceNow Knowledge Management REST API endpoint (requires sn_km_api plugin)
+    baseUrl: 'https://nets.service-now.com/api/sn_km_api/knowledge/articles',
+    // Default filter: published articles with > 100 views
+    filter: 'workflow_state=published^sys_view_count>100',
+    // Replace placeholder values with real credentials before deploying
+    username: '__SERVICENOW_USERNAME__',
+    password: '__SERVICENOW_PASSWORD__',
+    autoSyncWeekly: true,
+    lastSyncAt: null,
+    lastError: null,
+    articleCount: 0
+  };
+}
+
 const Storage = {
   /**
    * Get a value from storage
@@ -92,34 +120,31 @@ const Storage = {
    * @returns {Promise<Object>} Settings object
    */
   async getSettings() {
+    const base = {
+      repoSourceType: 'url',
+      repoUrl: '',
+      azureApiBaseUrl: '',
+      azurePat: '',
+      enableDummyArticles: true,
+      enableLLMSearch: false,
+      llmEndpoint: '',
+      llmApiKey: '',
+      llmModel: 'gpt-3.5-turbo',
+      enablePageScanning: false,
+      serviceNow: defaultServiceNowSettings()
+    };
     try {
       const { settings } = await chrome.storage.local.get('settings');
-      return settings || {
-        repoSourceType: 'url',
-        repoUrl: '',
-        azureApiBaseUrl: '',
-        azurePat: '',
-        enableDummyArticles: true,
-        enableLLMSearch: false,
-        llmEndpoint: '',
-        llmApiKey: '',
-        llmModel: 'gpt-3.5-turbo',
-        enablePageScanning: false
+      if (!settings) return base;
+      // Merge stored ServiceNow settings on top of defaults so new fields appear
+      return {
+        ...base,
+        ...settings,
+        serviceNow: { ...base.serviceNow, ...(settings.serviceNow || {}) }
       };
     } catch (error) {
       console.error('Error getting settings:', error);
-      return {
-        repoSourceType: 'url',
-        repoUrl: '',
-        azureApiBaseUrl: '',
-        azurePat: '',
-        enableDummyArticles: true,
-        enableLLMSearch: false,
-        llmEndpoint: '',
-        llmApiKey: '',
-        llmModel: 'gpt-3.5-turbo',
-        enablePageScanning: false
-      };
+      return base;
     }
   },
 
@@ -206,4 +231,5 @@ const Storage = {
 // Make it available globally for use in popup and options pages
 if (typeof window !== 'undefined') {
   window.Storage = Storage;
+  window.defaultServiceNowSettings = defaultServiceNowSettings;
 }
