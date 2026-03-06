@@ -259,35 +259,103 @@ async function handleTestServiceNow(snSettings) {
 
 /**
  * Core ServiceNow sync logic.
- * Fetches all matching articles using pagination and stores them via upsert.
+ * Phase 1: fetches the article index (metadata).
+ * Phase 2: for each index article that lacks a full body, fetches the full detail.
+ * Phase 3: validates body content, then runs the shared ingestion pipeline.
  * @param {Object} sn - ServiceNow settings block
- * @returns {Promise<Object>} { success, count, message }
+ * @returns {Promise<Object>} { success, count, message, indexCount, fetchedCount, skippedCount, parsedCount }
  */
 async function runServiceNowSync(sn) {
   const syncedAt = new Date().toISOString();
   try {
-    const rawArticles = await fetchServiceNowArticles(sn);
+    // ── Phase 1: fetch article index ────────────────────────────────────────
+    const indexArticles = await fetchServiceNowArticleIndex(sn);
 
-    if (!rawArticles || rawArticles.length === 0) {
+    console.log(`[ServiceNow] Index fetch complete: ${indexArticles.length} articles`);
+    if (indexArticles.length > 0) {
+      console.log(`[ServiceNow] Index article fields: ${Object.keys(indexArticles[0]).join(', ')}`);
+    }
+
+    if (!indexArticles || indexArticles.length === 0) {
       const result = {
         success: false,
         count: 0,
-        message: 'No matching articles found for current filter'
+        message: 'No matching articles found for current filter',
+        indexCount: 0, fetchedCount: 0, skippedCount: 0, parsedCount: 0
       };
-      await persistServiceNowSyncMeta(sn, null, result.message, 0);
+      await persistServiceNowSyncMeta(sn, null, result.message, 0,
+        { indexCount: 0, fetchedCount: 0, skippedCount: 0, parsedCount: 0 });
       return result;
     }
 
-    // Import articles using the in-worker ingestion function
-    const { upserted, stale, errors } = await ingestServiceNowArticles(rawArticles, syncedAt);
+    // ── Phase 2: enrich each article with full body content ──────────────────
+    const fullArticles = [];
+    const skippedArticles = [];
 
-    const message = `Successfully synced ${upserted} ServiceNow article(s)` +
-      (stale > 0 ? ` (${stale} marked stale)` : '') +
-      (errors.length > 0 ? `. ${errors.length} error(s) during import.` : '.');
+    for (const indexArticle of indexArticles) {
+      if (hasFullBody(indexArticle)) {
+        // List response already included the full body – use it directly
+        console.log(
+          `[ServiceNow] Article "${indexArticle.short_description || indexArticle.sys_id}" ` +
+          `has body in index response (bodyLen=${extractBodyField(indexArticle).trim().length})`
+        );
+        fullArticles.push(indexArticle);
+      } else {
+        // Need a second request to retrieve the full article body
+        const detail = await fetchServiceNowArticleDetail(indexArticle, sn);
+        if (detail && hasFullBody(detail)) {
+          fullArticles.push({ ...indexArticle, ...detail });
+        } else {
+          const title = indexArticle.short_description || indexArticle.sys_id || '(unknown)';
+          console.warn(`[ServiceNow] Skipping "${title}": detail content missing`);
+          skippedArticles.push({ title, reason: 'detail content missing' });
+        }
+      }
+    }
 
-    await persistServiceNowSyncMeta(sn, syncedAt, null, upserted);
+    console.log(
+      `[ServiceNow] Full articles ready: ${fullArticles.length} | skipped: ${skippedArticles.length}`
+    );
 
-    return { success: true, count: upserted, message };
+    if (fullArticles.length === 0) {
+      const msg =
+        `All ${indexArticles.length} article(s) skipped: full content could not be retrieved`;
+      await persistServiceNowSyncMeta(sn, null, msg, 0, {
+        indexCount: indexArticles.length,
+        fetchedCount: 0,
+        skippedCount: skippedArticles.length,
+        parsedCount: 0
+      });
+      return {
+        success: false,
+        count: 0,
+        message: msg,
+        indexCount: indexArticles.length,
+        fetchedCount: 0,
+        skippedCount: skippedArticles.length,
+        parsedCount: 0
+      };
+    }
+
+    // ── Phase 3: import / upsert articles ────────────────────────────────────
+    const { upserted, stale, errors } = await ingestServiceNowArticles(fullArticles, syncedAt);
+
+    const message =
+      `Synced ${upserted} ServiceNow article(s)` +
+      ` (${indexArticles.length} found, ${skippedArticles.length} skipped)` +
+      (stale > 0 ? ` · ${stale} marked stale` : '') +
+      (errors.length > 0 ? ` · ${errors.length} error(s)` : '');
+
+    const syncStats = {
+      indexCount: indexArticles.length,
+      fetchedCount: fullArticles.length,
+      skippedCount: skippedArticles.length,
+      parsedCount: upserted
+    };
+
+    await persistServiceNowSyncMeta(sn, syncedAt, null, upserted, syncStats);
+
+    return { success: true, count: upserted, message, ...syncStats };
   } catch (err) {
     const errorMsg = classifyNetworkError(err);
     await persistServiceNowSyncMeta(sn, null, errorMsg, 0);
@@ -296,10 +364,15 @@ async function runServiceNowSync(sn) {
 }
 
 /**
- * Persist sync metadata (lastSyncAt, lastError, articleCount) back to storage.
+ * Persist sync metadata (lastSyncAt, lastError, articleCount, syncStats) back to storage.
  * Does a shallow merge so other settings fields are preserved.
+ * @param {Object}      sn           - ServiceNow settings block
+ * @param {string|null} lastSyncAt   - ISO timestamp of this sync (null on failure)
+ * @param {string|null} lastError    - Error message (null on success)
+ * @param {number}      articleCount - Number of articles upserted
+ * @param {Object}      [syncStats]  - Optional detailed stats: { indexCount, fetchedCount, skippedCount, parsedCount }
  */
-async function persistServiceNowSyncMeta(sn, lastSyncAt, lastError, articleCount) {
+async function persistServiceNowSyncMeta(sn, lastSyncAt, lastError, articleCount, syncStats) {
   try {
     const { settings } = await chrome.storage.local.get('settings');
     const updated = {
@@ -309,7 +382,8 @@ async function persistServiceNowSyncMeta(sn, lastSyncAt, lastError, articleCount
         ...(settings?.serviceNow || {}),
         lastSyncAt: lastSyncAt || sn.lastSyncAt,
         lastError: lastError || null,
-        articleCount
+        articleCount,
+        ...(syncStats ? { syncStats } : {})
       }
     };
     await chrome.storage.local.set({ settings: updated });
@@ -319,7 +393,11 @@ async function persistServiceNowSyncMeta(sn, lastSyncAt, lastError, articleCount
 }
 
 /**
- * Fetch all ServiceNow Knowledge articles, following pagination.
+ * Fetch all ServiceNow Knowledge articles (index / metadata), following pagination.
+ *
+ * This function retrieves the article list only – it does NOT guarantee that
+ * a full HTML body is present on each returned object.  Call
+ * fetchServiceNowArticleDetail() for articles that lack a full body.
  *
  * Supports three response shapes defensively:
  *   • Array directly
@@ -327,9 +405,9 @@ async function persistServiceNowSyncMeta(sn, lastSyncAt, lastError, articleCount
  *   • { result: { articles: [...] } }
  *
  * @param {Object} sn - ServiceNow settings
- * @returns {Promise<Array>} Flat array of raw article objects
+ * @returns {Promise<Array>} Flat array of raw article index objects
  */
-async function fetchServiceNowArticles(sn) {
+async function fetchServiceNowArticleIndex(sn) {
   const PAGE_SIZE = 100;
   let offset = 0;
   const allArticles = [];
@@ -438,6 +516,157 @@ function extractArticlesFromPayload(data) {
 }
 
 /**
+ * Extract a single article object from a ServiceNow detail endpoint response.
+ * Handles the most common shapes returned by /articles/{id} endpoints:
+ *   • { result: {...} }         – single-object result (most common)
+ *   • { result: [{...}] }       – single-element array result
+ *   • { sys_id: ..., ... }      – bare object (no wrapper)
+ * @param {*} data - Parsed JSON payload from a detail request
+ * @returns {Object|null}
+ */
+function extractArticleDetailFromPayload(data) {
+  if (!data || typeof data !== 'object') return null;
+  if (data.result) {
+    if (!Array.isArray(data.result) && typeof data.result === 'object') return data.result;
+    if (Array.isArray(data.result) && data.result.length > 0) return data.result[0];
+  }
+  // Bare object: check for a field that only a real article would have
+  if (data.sys_id || data.number || data.short_description) return data;
+  return null;
+}
+
+/**
+ * Minimum body length (characters) required to consider an article "complete".
+ * Responses shorter than this are treated as metadata-only and trigger a detail fetch.
+ */
+const BODY_MIN_LENGTH = 200;
+
+/**
+ * Extract the best available body/content string from a raw ServiceNow article record.
+ * Checks all known field names in priority order and returns the first non-empty string.
+ * @param {Object} article - Raw article record
+ * @returns {string} Body string (may be empty)
+ */
+function extractBodyField(article) {
+  return (
+    article.text_html || article.wiki || article.text ||
+    article.description || article.body || article.content || ''
+  );
+}
+
+/**
+ * Return true when a raw ServiceNow article object already contains a
+ * sufficiently long body/content field.
+ * @param {Object} article - Raw article record
+ * @returns {boolean}
+ */
+function hasFullBody(article) {
+  return extractBodyField(article).trim().length >= BODY_MIN_LENGTH;
+}
+
+/**
+ * Fetch the full detail record for a single ServiceNow article.
+ *
+ * Identifier resolution order:
+ *   1. `link` / `url` field on the index article (direct REST URL)
+ *   2. `number` or `kb_number` appended to sn.baseUrl
+ *   3. `sys_id` appended to sn.baseUrl (last resort)
+ *
+ * Returns null on any failure so the caller can mark the article as skipped.
+ *
+ * @param {Object} articleRef - Index article record (may be metadata-only)
+ * @param {Object} sn         - ServiceNow settings (baseUrl, username, password)
+ * @returns {Promise<Object|null>} Full article record or null
+ */
+async function fetchServiceNowArticleDetail(articleRef, sn) {
+  const title = articleRef.short_description || articleRef.title || articleRef.name || '(unknown)';
+
+  // ── Build detail URL ──────────────────────────────────────────────────────
+  let detailUrl = null;
+  let identifier = null;
+
+  if (articleRef.link && typeof articleRef.link === 'string') {
+    detailUrl = articleRef.link;
+    identifier = detailUrl;
+  } else if (articleRef.url && typeof articleRef.url === 'string') {
+    detailUrl = articleRef.url;
+    identifier = detailUrl;
+  } else {
+    identifier =
+      articleRef.number || articleRef.kb_number || articleRef.sys_id || null;
+    if (!identifier) {
+      console.warn(
+        `[ServiceNow Detail] No identifier found for "${title}"; ` +
+        `available fields: ${Object.keys(articleRef).join(', ')}`
+      );
+      return null;
+    }
+    const base = sn.baseUrl.replace(/\/+$/, '');
+    detailUrl = `${base}/${encodeURIComponent(identifier)}`;
+  }
+
+  console.log(
+    `[ServiceNow Detail] Fetching: title="${title}" | identifier=${identifier}`
+  );
+
+  // ── HTTP request ──────────────────────────────────────────────────────────
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  let response;
+  try {
+    response = await fetch(detailUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': buildBasicAuthHeader(sn.username, sn.password)
+      },
+      signal: controller.signal
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.warn(`[ServiceNow Detail] Network error for "${title}": ${err.message}`);
+    return null;
+  }
+  clearTimeout(timeoutId);
+
+  if (!response.ok) {
+    console.warn(
+      `[ServiceNow Detail] HTTP ${response.status} for "${title}" (${detailUrl})`
+    );
+    return null;
+  }
+
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    console.warn(`[ServiceNow Detail] JSON parse error for "${title}"`);
+    return null;
+  }
+
+  // ── Extract article from response ─────────────────────────────────────────
+  const detail = extractArticleDetailFromPayload(data);
+  if (!detail) {
+    console.warn(
+      `[ServiceNow Detail] Could not extract article object from response for "${title}"`
+    );
+    return null;
+  }
+
+  const body = extractBodyField(detail);
+  const bodyLen = body.trim().length;
+  const procedureFound = /\bprocedure\b/i.test(body);
+
+  console.log(
+    `[ServiceNow Detail] title="${title}" | bodyLen=${bodyLen} | ` +
+    `procedureFound=${procedureFound} | bodyPresent=${bodyLen >= BODY_MIN_LENGTH}`
+  );
+
+  return detail;
+}
+
+/**
  * Map and store raw ServiceNow articles.
  * Replicates the logic of Articles.importServiceNowArticles() for use in the
  * service worker (which cannot import the articles.js module).
@@ -456,9 +685,8 @@ async function ingestServiceNowArticles(rawArticles, syncedAt) {
       const remoteId = raw.sys_id || raw.kb_number || raw.number || null;
       const title =
         raw.short_description || raw.title || raw.name || '(Untitled)';
-      const rawHtml =
-        raw.text_html || raw.wiki || raw.text ||
-        raw.description || raw.body || raw.content || '';
+      const rawHtml = extractBodyField(raw);
+      const rawBodyLength = rawHtml.trim().length;
 
       // Basic HTML sanitization (removes script/iframe/object/embed)
       const safeHtml = sanitizeHtml(rawHtml);
@@ -466,10 +694,16 @@ async function ingestServiceNowArticles(rawArticles, syncedAt) {
       // Segment HTML body into steps using the shared pipeline
       const steps = segmentHtmlIntoSteps(safeHtml, title);
 
-      // Debug logging: compare with Articles.logStepInfo() for uploaded articles
+      // Determine parse status for storage / debugging
+      const parseStatus =
+        steps.length > 1  ? 'parsed'   :
+        rawBodyLength > 0 ? 'fallback' : 'empty';
+
+      // Debug logging (mirrors Articles.logStepInfo() format for uploaded articles)
       const procedureFound = /\bprocedure\b/i.test(safeHtml);
       console.log(
-        `[ServiceNow Import] source=servicenow | title="${title}" | procedureSection=${procedureFound} | steps=${steps.length}` +
+        `[ServiceNow Import] title="${title}" | bodyLen=${rawBodyLength} | ` +
+        `procedureFound=${procedureFound} | parseStatus=${parseStatus} | steps=${steps.length}` +
         (steps.length > 0 ? ` | titles: ${steps.map(s => s.title).join(' | ')}` : '')
       );
 
@@ -485,6 +719,8 @@ async function ingestServiceNowArticles(rawArticles, syncedAt) {
         source: 'servicenow',
         remoteId,
         syncedAt,
+        rawBodyLength,
+        parseStatus,
         stale: false,
         createdAt: raw.sys_created_on || syncedAt,
         updatedAt: syncedAt
