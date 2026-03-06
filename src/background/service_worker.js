@@ -295,9 +295,10 @@ async function runServiceNowSync(sn) {
     for (const indexArticle of indexArticles) {
       if (hasFullBody(indexArticle)) {
         // List response already included the full body – use it directly
+        const { value: idxBody, field: idxBodyField } = detectBodyField(indexArticle);
         console.log(
           `[ServiceNow] Article "${indexArticle.short_description || indexArticle.sys_id}" ` +
-          `has body in index response (bodyLen=${extractBodyField(indexArticle).trim().length})`
+          `has body in index response | bodyField=${idxBodyField} | bodyLen=${idxBody.trim().length}`
         );
         fullArticles.push(indexArticle);
       } else {
@@ -314,7 +315,7 @@ async function runServiceNowSync(sn) {
     }
 
     console.log(
-      `[ServiceNow] Full articles ready: ${fullArticles.length} | skipped: ${skippedArticles.length}`
+      `[ServiceNow] Full articles ready: ${fullArticles.length} | missing body (skipped): ${skippedArticles.length}`
     );
 
     if (fullArticles.length === 0) {
@@ -467,7 +468,17 @@ async function fetchServiceNowArticleIndex(sn) {
 }
 
 /**
+ * Explicit field list requested from the ServiceNow API.
+ * Requesting these fields by name ensures the list endpoint returns body
+ * content even when the default response omits large text fields.
+ */
+const SN_BODY_FIELDS =
+  'sys_id,number,short_description,text,description,article,body,content,sys_updated_on';
+
+/**
  * Build a ServiceNow Knowledge API URL with pagination parameters.
+ * Includes an explicit sysparm_fields list so the list endpoint returns full
+ * body/content fields alongside the normal metadata.
  * @param {string} baseUrl
  * @param {string} filter - raw sysparm_query value (not yet encoded)
  * @param {number} limit
@@ -477,6 +488,7 @@ async function fetchServiceNowArticleIndex(sn) {
 function buildServiceNowUrl(baseUrl, filter, limit, offset) {
   const url = new URL(baseUrl);
   if (filter) url.searchParams.set('sysparm_query', filter);
+  url.searchParams.set('sysparm_fields', SN_BODY_FIELDS);
   url.searchParams.set('sysparm_limit', String(limit));
   url.searchParams.set('sysparm_offset', String(offset));
   return url.toString();
@@ -542,16 +554,39 @@ function extractArticleDetailFromPayload(data) {
 const BODY_MIN_LENGTH = 200;
 
 /**
+ * Ordered list of field names that may contain the article's full HTML/text body.
+ * The fields explicitly requested via SN_BODY_FIELDS are included here, along with
+ * legacy field names (text_html, wiki) that some ServiceNow instances return by
+ * default even without explicit field selection.
+ */
+const BODY_FIELD_CANDIDATES = [
+  'text_html', 'wiki', 'article', 'text', 'description', 'body', 'content'
+];
+
+/**
+ * Inspect a raw ServiceNow article record and return the first non-empty body
+ * field together with its field name.
+ * @param {Object} article - Raw article record
+ * @returns {{ value: string, field: string|null }}
+ */
+function detectBodyField(article) {
+  for (const field of BODY_FIELD_CANDIDATES) {
+    const val = article[field];
+    if (typeof val === 'string' && val.trim().length > 0) {
+      return { value: val, field };
+    }
+  }
+  return { value: '', field: null };
+}
+
+/**
  * Extract the best available body/content string from a raw ServiceNow article record.
  * Checks all known field names in priority order and returns the first non-empty string.
  * @param {Object} article - Raw article record
  * @returns {string} Body string (may be empty)
  */
 function extractBodyField(article) {
-  return (
-    article.text_html || article.wiki || article.text ||
-    article.description || article.body || article.content || ''
-  );
+  return detectBodyField(article).value;
 }
 
 /**
@@ -568,9 +603,12 @@ function hasFullBody(article) {
  * Fetch the full detail record for a single ServiceNow article.
  *
  * Identifier resolution order:
- *   1. `link` / `url` field on the index article (direct REST URL)
- *   2. `number` or `kb_number` appended to sn.baseUrl
- *   3. `sys_id` appended to sn.baseUrl (last resort)
+ *   1. `sys_id` appended to sn.baseUrl (preferred – deterministic & stable)
+ *   2. `link` / `url` field on the index article (direct REST URL)
+ *   3. `number` or `kb_number` appended to sn.baseUrl (fallback)
+ *
+ * The detail URL always includes sysparm_fields so that the response contains
+ * all likely body fields regardless of the API's default field set.
  *
  * Returns null on any failure so the caller can mark the article as skipped.
  *
@@ -585,15 +623,25 @@ async function fetchServiceNowArticleDetail(articleRef, sn) {
   let detailUrl = null;
   let identifier = null;
 
-  if (articleRef.link && typeof articleRef.link === 'string') {
-    detailUrl = articleRef.link;
-    identifier = detailUrl;
+  // Prefer sys_id for the detail request – it is stable and unambiguous
+  if (articleRef.sys_id && typeof articleRef.sys_id === 'string') {
+    identifier = articleRef.sys_id;
+    const base = sn.baseUrl.replace(/\/+$/, '');
+    const u = new URL(`${base}/${encodeURIComponent(identifier)}`);
+    u.searchParams.set('sysparm_fields', SN_BODY_FIELDS);
+    detailUrl = u.toString();
+  } else if (articleRef.link && typeof articleRef.link === 'string') {
+    identifier = articleRef.link;
+    const u = new URL(articleRef.link);
+    u.searchParams.set('sysparm_fields', SN_BODY_FIELDS);
+    detailUrl = u.toString();
   } else if (articleRef.url && typeof articleRef.url === 'string') {
-    detailUrl = articleRef.url;
-    identifier = detailUrl;
+    identifier = articleRef.url;
+    const u = new URL(articleRef.url);
+    u.searchParams.set('sysparm_fields', SN_BODY_FIELDS);
+    detailUrl = u.toString();
   } else {
-    identifier =
-      articleRef.number || articleRef.kb_number || articleRef.sys_id || null;
+    identifier = articleRef.number || articleRef.kb_number || null;
     if (!identifier) {
       console.warn(
         `[ServiceNow Detail] No identifier found for "${title}"; ` +
@@ -602,7 +650,9 @@ async function fetchServiceNowArticleDetail(articleRef, sn) {
       return null;
     }
     const base = sn.baseUrl.replace(/\/+$/, '');
-    detailUrl = `${base}/${encodeURIComponent(identifier)}`;
+    const u = new URL(`${base}/${encodeURIComponent(identifier)}`);
+    u.searchParams.set('sysparm_fields', SN_BODY_FIELDS);
+    detailUrl = u.toString();
   }
 
   console.log(
@@ -654,13 +704,12 @@ async function fetchServiceNowArticleDetail(articleRef, sn) {
     return null;
   }
 
-  const body = extractBodyField(detail);
+  const { value: body, field: bodyField } = detectBodyField(detail);
   const bodyLen = body.trim().length;
-  const procedureFound = /\bprocedure\b/i.test(body);
 
   console.log(
-    `[ServiceNow Detail] title="${title}" | bodyLen=${bodyLen} | ` +
-    `procedureFound=${procedureFound} | bodyPresent=${bodyLen >= BODY_MIN_LENGTH}`
+    `[ServiceNow Detail] title="${title}" | bodyField=${bodyField || 'none'} | ` +
+    `bodyLen=${bodyLen} | bodyPresent=${bodyLen >= BODY_MIN_LENGTH}`
   );
 
   return detail;
@@ -679,13 +728,14 @@ async function ingestServiceNowArticles(rawArticles, syncedAt) {
   const errors = [];
   const processed = [];
   const syncedRemoteIds = new Set();
+  let missingBodyCount = 0;
 
   for (const raw of rawArticles) {
     try {
       const remoteId = raw.sys_id || raw.kb_number || raw.number || null;
       const title =
         raw.short_description || raw.title || raw.name || '(Untitled)';
-      const rawHtml = extractBodyField(raw);
+      const { value: rawHtml, field: bodyField } = detectBodyField(raw);
       const rawBodyLength = rawHtml.trim().length;
 
       // Basic HTML sanitization (removes script/iframe/object/embed)
@@ -699,11 +749,12 @@ async function ingestServiceNowArticles(rawArticles, syncedAt) {
         steps.length > 1  ? 'parsed'   :
         rawBodyLength > 0 ? 'fallback' : 'empty';
 
+      if (rawBodyLength === 0) missingBodyCount++;
+
       // Debug logging (mirrors Articles.logStepInfo() format for uploaded articles)
-      const procedureFound = /\bprocedure\b/i.test(safeHtml);
       console.log(
-        `[ServiceNow Import] title="${title}" | bodyLen=${rawBodyLength} | ` +
-        `procedureFound=${procedureFound} | parseStatus=${parseStatus} | steps=${steps.length}` +
+        `[ServiceNow Import] title="${title}" | bodyField=${bodyField || 'none'} | bodyLen=${rawBodyLength} | ` +
+        `parseStatus=${parseStatus} | steps=${steps.length}` +
         (steps.length > 0 ? ` | titles: ${steps.map(s => s.title).join(' | ')}` : '')
       );
 
@@ -733,6 +784,12 @@ async function ingestServiceNowArticles(rawArticles, syncedAt) {
         `Failed to process article "${raw.short_description || raw.sys_id}": ${err.message}`
       );
     }
+  }
+
+  if (missingBodyCount > 0) {
+    console.warn(
+      `[ServiceNow Import] ${missingBodyCount} of ${processed.length} article(s) have no body content`
+    );
   }
 
   // Load existing articles
