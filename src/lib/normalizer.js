@@ -86,14 +86,34 @@ const ArticleNormalizer = {
 
   /**
    * Validate and sanitize an image URL.
-   * Only allows data: URIs with image MIME types and http/https URLs.
+   * Accepts:
+   *   - data: URIs with image MIME types
+   *   - Absolute http / https URLs
+   *   - Protocol-relative URLs (// prefix) — normalised to https:
+   *   - Relative URLs (no URI scheme) — preserved as-is so images from
+   *     page-relative sources (ServiceNow, HTML exports) are not discarded.
+   *     Path-traversal sequences ("..") in relative URLs do not create
+   *     security risks in this context because Chrome extensions run in a
+   *     sandboxed chrome-extension:// origin; relative src values cannot
+   *     read local files or bypass CSP.
+   * Rejects any URL carrying an unrecognised URI scheme (e.g. javascript:,
+   * vbscript:, ftp:) and blank / whitespace-only strings.
    * @param {string} url
    * @returns {string|null} Sanitized URL or null if disallowed
    */
   sanitizeImageUrl(url) {
     if (!url) return null;
-    if (url.startsWith('data:image/'))              return url;
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith('data:image/'))              return trimmed;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    // Protocol-relative: normalise to https
+    if (trimmed.startsWith('//'))                       return 'https:' + trimmed;
+    // Relative URL: allow only if no URI scheme is present.
+    // RFC-3986 scheme is: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) ":"
+    // Rejecting anything that looks like a scheme (e.g. javascript:, vbscript:)
+    // while passing plain relative paths like /images/pic.png or ./img.png
+    if (!/^[a-z][a-z0-9+\-.]*:/i.test(trimmed))        return trimmed;
     return null;
   },
 
@@ -162,18 +182,38 @@ const ArticleNormalizer = {
    * Extract and sanitize all images from an element.
    * Returns an array of image descriptor objects and removes invalid images
    * from the element in-place.
+   *
+   * Handles:
+   *   - Standard <img src="..."> elements
+   *   - Lazy-loaded images using data-src (falls back when src is absent/invalid)
+   *   - <figure> / <figcaption> — figcaption text used as alt when alt is empty
    * @param {Element} element
    * @returns {Array<{ alt: string, dataUrlOrRemoteUrl: string }>}
    */
   extractImages(element) {
     const images = [];
     element.querySelectorAll('img').forEach(img => {
-      const src = img.getAttribute('src') || '';
-      const alt = img.getAttribute('alt') || '';
+      // Prefer src; fall back to data-src (lazy-loaded images common in CMS / ServiceNow)
+      const rawSrc = img.getAttribute('src') || '';
+      const dataSrc = img.getAttribute('data-src') || '';
+      const src = rawSrc || dataSrc;
+
+      // Build alt text: use alt attribute first, then title, then figcaption
+      let alt = img.getAttribute('alt') || img.getAttribute('title') || '';
+      if (!alt) {
+        const figure = img.closest('figure');
+        if (figure) {
+          const caption = figure.querySelector('figcaption');
+          if (caption) alt = caption.textContent.trim();
+        }
+      }
+
       const sanitizedSrc = this.sanitizeImageUrl(src);
       if (sanitizedSrc) {
         images.push({ alt, dataUrlOrRemoteUrl: sanitizedSrc });
         img.setAttribute('src', sanitizedSrc);
+        // Remove data-src to prevent double-loading by the browser
+        if (img.hasAttribute('data-src')) img.removeAttribute('data-src');
       } else {
         img.remove();
       }

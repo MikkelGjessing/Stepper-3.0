@@ -1295,15 +1295,19 @@ function validateArticle(article) {
 }
 
 /**
- * Sanitize image URL
+ * Sanitize image URL — mirrors ArticleNormalizer.sanitizeImageUrl() in normalizer.js.
+ * Accepts data URIs, absolute http/https, protocol-relative, and relative URLs.
+ * Rejects blank strings and any URL carrying an unrecognised URI scheme (e.g. javascript:).
  */
 function sanitizeImageUrl(url) {
-  if (url.startsWith('data:image/')) {
-    return url;
-  }
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('data:image/'))              return trimmed;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  if (trimmed.startsWith('//'))                       return 'https:' + trimmed;
+  // Relative URL: safe if no URI scheme present
+  if (!/^[a-z][a-z0-9+\-.]*:/i.test(trimmed))        return trimmed;
   return null;
 }
 

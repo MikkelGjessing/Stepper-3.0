@@ -2177,26 +2177,9 @@ const Articles = {
       return /^\d+[.)]\s+\S/.test(text.trim()) || /^[a-z][)]\s+\S/i.test(text.trim());
     };
     
-    // Helper: Extract images from an element
-    const extractImages = (element) => {
-      const images = [];
-      const imgElements = element.querySelectorAll('img');
-      imgElements.forEach(img => {
-        const src = img.getAttribute('src') || '';
-        const alt = img.getAttribute('alt') || '';
-        const sanitizedSrc = this.sanitizeImageUrl(src);
-        if (sanitizedSrc) {
-          images.push({
-            alt: alt,
-            dataUrlOrRemoteUrl: sanitizedSrc
-          });
-          img.setAttribute('src', sanitizedSrc);
-        } else {
-          img.remove();
-        }
-      });
-      return images;
-    };
+    // Helper: Extract images from an element — delegates to the shared helper
+    // in ArticleNormalizer so all sources use the same universal extraction logic.
+    const extractImages = (element) => ArticleNormalizer.extractImages(element);
     
     // Helper: Create step object
     const createStep = (stepNumber, primaryTitle, substepLabel, content, images) => {
@@ -2476,7 +2459,15 @@ const Articles = {
         continue;
       }
 
+      // Extract images from all cells in the row (modifies cell DOM in-place)
+      // so that bodyParts built below captures the sanitized src values.
+      const images = [];
+      cells.forEach(cell => {
+        ArticleNormalizer.extractImages(cell).forEach(img => images.push(img));
+      });
+
       // Build body HTML: main cell + any additional detail/note columns
+      // (captured after image extraction so src values are already sanitized)
       const bodyParts = [mainCell.innerHTML];
       cells.forEach((cell, idx) => {
         if (idx === mainColIdx || idx === stepColIdx) return;
@@ -2488,22 +2479,6 @@ const Articles = {
         } else if (!IMAGE_COL.test(header)) {
           bodyParts.push(cell.innerHTML);
         }
-      });
-
-      // Extract images from all cells in the row
-      const images = [];
-      cells.forEach(cell => {
-        cell.querySelectorAll('img').forEach(img => {
-          const src = img.getAttribute('src') || '';
-          const alt = img.getAttribute('alt') || '';
-          const sanitizedSrc = this.sanitizeImageUrl(src);
-          if (sanitizedSrc) {
-            images.push({ alt, dataUrlOrRemoteUrl: sanitizedSrc });
-            img.setAttribute('src', sanitizedSrc);
-          } else {
-            img.remove();
-          }
-        });
       });
 
       // Determine step title
@@ -2607,18 +2582,7 @@ const Articles = {
         }
       }
       if (!currentTitle) return;
-      const images = [];
-      currentDiv.querySelectorAll('img').forEach(img => {
-        const src = img.getAttribute('src') || '';
-        const alt = img.getAttribute('alt') || '';
-        const sanitizedSrc = this.sanitizeImageUrl(src);
-        if (sanitizedSrc) {
-          images.push({ alt, dataUrlOrRemoteUrl: sanitizedSrc });
-          img.setAttribute('src', sanitizedSrc);
-        } else {
-          img.remove();
-        }
-      });
+      const images = ArticleNormalizer.extractImages(currentDiv);
       // Strip leading body elements that duplicate the resolved title.
       // Uses fuzzy normalization to handle multi-paragraph headings, colon
       // variants, and trailing artifact digits (e.g. "VAT1" vs "VAT").
@@ -2684,18 +2648,7 @@ const Articles = {
             : firstSentence;
           const liDiv = document.createElement('div');
           liDiv.appendChild(li.cloneNode(true));
-          const liImages = [];
-          liDiv.querySelectorAll('img').forEach(img => {
-            const src = img.getAttribute('src') || '';
-            const alt = img.getAttribute('alt') || '';
-            const sanitizedSrc = this.sanitizeImageUrl(src);
-            if (sanitizedSrc) {
-              liImages.push({ alt, dataUrlOrRemoteUrl: sanitizedSrc });
-              img.setAttribute('src', sanitizedSrc);
-            } else {
-              img.remove();
-            }
-          });
+          const liImages = ArticleNormalizer.extractImages(liDiv);
           const sanitized = this.sanitizeHtmlContent(liDiv);
           steps.push({ title: liTitle, bodyHtml: sanitized.innerHTML, images: liImages });
           globalStepNum++;
