@@ -341,7 +341,7 @@ const explicitStepHeadingParser = {
   name:     'explicitStepHeadingParser',
   priority: 3,
 
-  _STEP_MARKER_RE: /^Step\s+\d+\s*[:\-–]/i,
+  _STEP_MARKER_RE: /^(?:Step|STEP)\s+\d+(?:\s*[:\-–]|\s*$)/i,
   _NUMBERED_RE:    /^\d+[.)]\s+\S/,
 
   /** Return true if the heading text is a structural section name, not a step title. */
@@ -427,7 +427,7 @@ const explicitStepHeadingParser = {
 
       if (stepHeadings.length >= 2) {
         stepHeadings.forEach(heading => {
-          const stepTitle = heading.textContent.trim();
+          let stepTitle = heading.textContent.trim();
           // Collect siblings until the next heading
           const stepContent = document.createElement('div');
           let sibling = heading.nextElementSibling;
@@ -435,6 +435,53 @@ const explicitStepHeadingParser = {
             stepContent.appendChild(sibling.cloneNode(true));
             sibling = sibling.nextElementSibling;
           }
+
+          // ── Deduplicate body content ───────────────────────────────────────
+          // Strip leading generic "STEP" / "STEP N" elements that duplicate
+          // the step-label indicator (e.g. a bold "<p>STEP</p>" below an H2).
+          let firstChild = stepContent.firstElementChild;
+          while (firstChild && /^(?:STEP|Step)\s*\d*\s*$/.test(firstChild.textContent.trim())) {
+            firstChild.remove();
+            firstChild = stepContent.firstElementChild;
+          }
+
+          // If the heading itself is a bare numeric marker ("STEP N" / "Step N")
+          // rather than a descriptive title, promote the first body element as
+          // the real step title and remove it from the body.
+          if (/^(?:STEP|Step)\s+\d+\s*$/.test(stepTitle)) {
+            firstChild = stepContent.firstElementChild;
+            if (firstChild) {
+              const firstText = firstChild.textContent.trim();
+              if (firstText && firstText.length <= MAX_TITLE_LENGTH) {
+                stepTitle = firstText;
+                firstChild.remove();
+              }
+            }
+          } else if (/^(?:STEP|Step)\s*$/.test(stepTitle)) {
+            // Heading is just the generic "STEP" / "Step" label (no number) —
+            // promote the first body element as the real step title using first sentence.
+            firstChild = stepContent.firstElementChild;
+            if (firstChild) {
+              const fullText = firstChild.textContent.trim();
+              const firstSentence = fullText.replace(/\s+/g, ' ')
+                .split(/[.!?](?:\s|$)/)[0].trim();
+              const titleCandidate = firstSentence.length > MAX_TITLE_LENGTH
+                ? firstSentence.substring(0, MAX_TITLE_LENGTH)
+                : firstSentence;
+              if (titleCandidate && !/^(?:STEP|Step)\s*\d*\s*$/.test(titleCandidate)) {
+                stepTitle = titleCandidate;
+                firstChild.remove();
+              }
+            }
+          } else {
+            // For descriptive headings, also strip a leading body element that
+            // exactly repeats the heading text (documents that echo the title).
+            firstChild = stepContent.firstElementChild;
+            if (firstChild && firstChild.textContent.trim() === stepTitle) {
+              firstChild.remove();
+            }
+          }
+
           steps.push(_buildStep(stepTitle, stepContent));
         });
       }

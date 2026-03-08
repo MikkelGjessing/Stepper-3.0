@@ -2023,18 +2023,33 @@ const Articles = {
       return text.length > MAX_LABEL_LENGTH ? text.substring(0, LABEL_TRUNCATE_LENGTH) + '...' : text;
     };
     
-    // Helper: Check if text matches "Step N:" pattern
+    // Helper: Check if text matches a step marker pattern:
+    // "Step N: Title", "Step N – Title", "Step N - Title", "STEP N" (standalone), "Step N" (standalone)
     const isStepMarker = (text) => {
-      return /^Step\s+(\d+)\s*:\s*(.+)$/i.test(text);
+      return /^(?:Step|STEP)\s+\d+\s*(?:[:\-–].+|$)/i.test(text);
     };
     
-    // Helper: Extract step number and title from "Step N: Title" text
+    // Helper: Extract step number and title from step marker text.
+    // Returns { number, title } where title may be null when the marker is standalone
+    // (e.g. "STEP 1" without a descriptive title — title is then extracted from body).
     const parseStepMarker = (text) => {
-      const match = text.match(/^Step\s+(\d+)\s*:\s*(.+)$/i);
-      if (match) {
-        return { number: parseInt(match[1]), title: match[2].trim() };
+      // Full format: "Step N: Title", "Step N – Title", "Step N - Title"
+      const fullMatch = text.match(/^(?:Step|STEP)\s+(\d+)\s*[:\-–]\s*(.+)$/i);
+      if (fullMatch) {
+        return { number: parseInt(fullMatch[1]), title: fullMatch[2].trim() };
+      }
+      // Standalone format: "STEP N" or "Step N" with no trailing title text
+      const standaloneMatch = text.match(/^(?:STEP|Step)\s+(\d+)\s*$/i);
+      if (standaloneMatch) {
+        return { number: parseInt(standaloneMatch[1]), title: null };
       }
       return null;
+    };
+
+    // Helper: Return true if text is a generic step label with no meaningful title
+    // (e.g. "STEP", "Step", "STEP 1", "Step 2") that should be stripped from body content.
+    const isGenericStepLabel = (text) => {
+      return /^(?:STEP|Step)\s*\d*\s*$/.test(text.trim());
     };
     
     // Helper: Check if element is a chapter/section heading (not a step)
@@ -2159,11 +2174,74 @@ const Articles = {
     for (let primary of primarySteps) {
       const allContent = document.createElement('div');
       primary.nodes.forEach(node => allContent.appendChild(node.cloneNode(true)));
+
+      // ── Normalise title and deduplicate body ────────────────────────────────
+      let effectiveTitle = primary.title;
+
+      // Strip any leading generic step-label elements from body
+      // (e.g. "<p>STEP</p>", "<p>STEP 1</p>" that duplicate the step-label indicator).
+      let firstChild = allContent.firstElementChild;
+      while (firstChild && isGenericStepLabel(firstChild.textContent.trim())) {
+        firstChild.remove();
+        firstChild = allContent.firstElementChild;
+      }
+
+      // When the marker had no inline title (standalone "STEP N"), extract the
+      // title from the first body element, then remove it from the body so it
+      // does not appear twice in the rendered output.
+      if (!effectiveTitle) {
+        firstChild = allContent.firstElementChild;
+        if (firstChild) {
+          const firstText = firstChild.textContent.trim();
+          if (firstText && firstText.length <= MAX_LABEL_LENGTH) {
+            effectiveTitle = firstText;
+            firstChild.remove();
+          }
+        }
+      }
+
+      // When the inline title is just the generic word "STEP" / "Step" (no number,
+      // no description), it is a placeholder label rather than a meaningful title.
+      // Promote the first body element as the real title so that documents structured
+      // as "Step 1: STEP / Create the order / Instructions" produce the title
+      // "Create the order" rather than the unhelpful "STEP".
+      // Use the first sentence (split on sentence-ending punctuation) to keep the title concise.
+      if (effectiveTitle && /^(?:STEP|Step)\s*$/.test(effectiveTitle)) {
+        firstChild = allContent.firstElementChild;
+        if (firstChild) {
+          const fullText = firstChild.textContent.trim();
+          const firstSentence = fullText.replace(/\s+/g, ' ')
+            .split(/[.!?](?:\s|$)/)[0].trim();
+          const titleCandidate = firstSentence.length > MAX_LABEL_LENGTH
+            ? firstSentence.substring(0, MAX_LABEL_LENGTH)
+            : firstSentence;
+          if (titleCandidate && !isGenericStepLabel(titleCandidate)) {
+            effectiveTitle = titleCandidate;
+            firstChild.remove();
+          }
+        }
+      }
+
+      // Strip leading body element when it exactly duplicates the title
+      // (covers documents that repeat the heading as the first body paragraph).
+      if (effectiveTitle) {
+        firstChild = allContent.firstElementChild;
+        if (firstChild && firstChild.textContent.trim() === effectiveTitle) {
+          firstChild.remove();
+        }
+      }
+
+      // Safety fallback: use generic step label when no title could be resolved.
+      if (!effectiveTitle) {
+        effectiveTitle = `Step ${primary.number}`;
+      }
+
       const images = extractImages(allContent);
       const sanitized = this.sanitizeHtmlContent(allContent);
 
       steps.push({
-        title: `Step ${primary.number}: ${primary.title}`,
+        title: `Step ${primary.number}: ${effectiveTitle}`,
+        displayNumber: primary.number,
         bodyHtml: sanitized.innerHTML,
         images: images
       });
@@ -2390,6 +2468,9 @@ const Articles = {
   _extractSectionAwareSteps(body, nodes) {
     const steps = [];
 
+    /** Maximum characters for a step title extracted from body content. */
+    const MAX_STEP_TITLE_LENGTH = 80;
+
     // Pre-scan: does the document have an explicit Procedure-section heading?
     let hasProcedureSection = false;
     for (const node of nodes) {
@@ -2409,7 +2490,30 @@ const Articles = {
     let currentDiv   = null;
 
     const flushCurrentStep = () => {
-      if (!currentTitle || !currentDiv) return;
+      if (!currentDiv) return;
+      // Resolve title when it was deferred (standalone "STEP N" marker with no inline title).
+      // Extract from the first non-generic body element, stripping generic labels first.
+      if (!currentTitle) {
+        // Strip leading generic "STEP" / "STEP N" labels
+        let firstEl = currentDiv.firstElementChild;
+        while (firstEl && /^(?:STEP|Step)\s*\d*\s*$/.test(firstEl.textContent.trim())) {
+          firstEl.remove();
+          firstEl = currentDiv.firstElementChild;
+        }
+        if (firstEl) {
+          const firstText = firstEl.textContent.trim();
+          if (firstText && firstText.length <= MAX_STEP_TITLE_LENGTH) {
+            currentTitle = firstText;
+            firstEl.remove();
+          }
+        }
+        // Fallback: use step number stored on the container element
+        if (!currentTitle) {
+          const stepNum = currentDiv.dataset.stepNum || globalStepNum;
+          currentTitle = `Step ${stepNum}`;
+        }
+      }
+      if (!currentTitle) return;
       const images = [];
       currentDiv.querySelectorAll('img').forEach(img => {
         const src = img.getAttribute('src') || '';
@@ -2422,6 +2526,11 @@ const Articles = {
           img.remove();
         }
       });
+      // Strip leading body element that duplicates the title
+      const firstEl = currentDiv.firstElementChild;
+      if (firstEl && firstEl.textContent.trim() === currentTitle) {
+        firstEl.remove();
+      }
       const sanitized = this.sanitizeHtmlContent(currentDiv);
       steps.push({ title: currentTitle, bodyHtml: sanitized.innerHTML, images });
       currentTitle = null;
@@ -2500,6 +2609,23 @@ const Articles = {
           globalStepNum++;
         });
         continue;
+      }
+
+      // ── Standalone "STEP N" / "Step N" paragraph marker ─────────────────────
+      // Handles documents where each step starts with a bare "STEP 1" / "Step 2"
+      // line (no colon / no inline title). The title is extracted from the next
+      // non-generic body element; generic "STEP"/"STEP N" labels are skipped.
+      if (node.tagName === 'P' || node.tagName.match(/^H[1-6]$/)) {
+        const stepNumMatch = text.match(/^(?:STEP|Step)\s+(\d+)\s*$/i);
+        if (stepNumMatch) {
+          flushCurrentStep();
+          currentTitle = null; // will be set from the first following non-generic element
+          currentDiv = document.createElement('div');
+          // Store the extracted step number so the title placeholder can be resolved later.
+          currentDiv.dataset.stepNum = stepNumMatch[1];
+          globalStepNum = parseInt(stepNumMatch[1], 10);
+          continue;
+        }
       }
 
       // ── Numbered paragraph: "1. xxx" or "1) xxx" ──────────────────────────

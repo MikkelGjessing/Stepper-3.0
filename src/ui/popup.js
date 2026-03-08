@@ -446,9 +446,67 @@ function renderStepView() {
   // Extract pure step title: strip "Step N:" prefix if present (added by the parser).
   // Guard against null/undefined up front to keep the remaining logic clean.
   let displayTitle = (currentStep.title || '').trim();
-  const stepPrefixMatch = displayTitle.match(/^Step\s+\d+\s*:\s*/i);
+  // Strip "Step N:" / "STEP N:" / "Step N –" prefix (with separator)
+  const stepPrefixMatch = displayTitle.match(/^(?:Step|STEP)\s+\d+\s*[:\-–]\s*/i);
   if (stepPrefixMatch) {
     displayTitle = displayTitle.slice(stepPrefixMatch[0].length).trim();
+  }
+  // Strip bare "Step N" / "STEP N" (no colon) — these are numeric markers, not titles.
+  if (/^(?:Step|STEP)\s+\d+\s*$/i.test(displayTitle)) {
+    displayTitle = '';
+  }
+
+  // Pre-process bodyHtml: sanitize once, then strip duplicate step-label elements.
+  const bodyDiv = document.createElement('div');
+  bodyDiv.innerHTML = sanitizeHtml(currentStep.bodyHtml || '');
+  // Remove leading generic "STEP" / "STEP N" / "Step" / "Step N" labels from body
+  // (they duplicate the step-label indicator already shown above the title).
+  {
+    let firstEl = bodyDiv.firstElementChild;
+    while (firstEl && /^(?:STEP|Step)\s*\d*\s*$/.test(firstEl.textContent.trim())) {
+      firstEl.remove();
+      firstEl = bodyDiv.firstElementChild;
+    }
+  }
+  // If no display title yet, promote the first body element as the title
+  // (handles standalone "STEP N" markers where title was deferred to body).
+  if (!displayTitle) {
+    const firstEl = bodyDiv.firstElementChild;
+    if (firstEl) {
+      const firstText = firstEl.textContent.trim();
+      if (firstText && firstText.length <= 100) {
+        displayTitle = firstText;
+        firstEl.remove();
+      }
+    }
+  }
+  // Strip the first body element if it exactly duplicates the display title
+  // (covers documents that echo the heading as the first body paragraph).
+  if (displayTitle) {
+    const firstEl = bodyDiv.firstElementChild;
+    if (firstEl && firstEl.textContent.trim() === displayTitle) {
+      firstEl.remove();
+    }
+  }
+  // If title is just the generic "STEP" / "Step" label (no number, no description),
+  // promote the first body element as the real step title so that "STEP 1 / STEP / body"
+  // becomes "STEP 1 / <actual title> / body" (see acceptance criteria).
+  // Use the first sentence of the body element (not the full text) to keep the title short.
+  if (/^(?:STEP|Step)\s*$/.test(displayTitle)) {
+    const firstEl = bodyDiv.firstElementChild;
+    if (firstEl) {
+      const fullText = firstEl.textContent.trim();
+      // Extract first sentence (split on sentence-ending punctuation followed by space or end)
+      const firstSentence = fullText.replace(/\s+/g, ' ')
+        .split(/[.!?](?:\s|$)/)[0].trim();
+      const titleCandidate = firstSentence.length > 80
+        ? firstSentence.substring(0, 80)
+        : firstSentence;
+      if (titleCandidate && !/^(?:STEP|Step)\s*\d*\s*$/.test(titleCandidate)) {
+        displayTitle = titleCandidate;
+        firstEl.remove();
+      }
+    }
   }
   // Never show an empty step title
   if (!displayTitle) {
@@ -457,13 +515,17 @@ function renderStepView() {
   }
   console.log('[Stepper] Step rendered: step.title=', displayTitle, '| article=', article.title, '| stepIndex=', currentStepIndex + 1);
 
+  // Use the stored displayNumber when available (preserves original step numbering
+  // from the source document); fall back to the sequential 1-based index.
+  const displayNumber = currentStep.displayNumber || (currentStepIndex + 1);
+
   // Render step content into the scrollable area
   articleContentScrollable.innerHTML = `
     <div class="step-view-content">
-      <div class="step-label">STEP ${currentStepIndex + 1}</div>
+      <div class="step-label">STEP ${displayNumber}</div>
       <h3 class="step-view-step-title">${escapeHtml(displayTitle)}</h3>
       <div class="step-view-step-body">
-        ${sanitizeHtml(currentStep.bodyHtml)}
+        ${bodyDiv.innerHTML}
       </div>
     </div>
   `;
