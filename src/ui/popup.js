@@ -408,6 +408,87 @@ async function displayArticle(articleId) {
   renderStepView();
 }
 
+// Regex that matches leading "STEP N:", "Step 2 –", "STEP 1 -", "STEP 1" tokens.
+// Used by _normalizeTitleForComparison to strip step-number prefixes before comparing.
+const _STEP_TOKEN_RE = /^(?:step)\s+\d+\s*[:\-–]?\s*/i;
+
+// Block-level element tags considered meaningful heading content for duplicate detection.
+// Inline elements (<span>, <a>, <em>, etc.) and <br> are intentionally excluded.
+const _HEADING_BLOCK_TAGS = new Set(['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI']);
+
+/**
+ * Normalize a title string for fuzzy duplicate comparison.
+ * - lowercase
+ * - strip leading step-number tokens (STEP 1:, Step 2 –, etc.)
+ * - replace colons and dashes with spaces
+ * - collapse whitespace and trim
+ * @param {string} str
+ * @returns {string}
+ */
+function _normalizeTitleForComparison(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(_STEP_TOKEN_RE, '')       // strip leading step-number tokens
+    .replace(/[:\-–]/g, ' ')           // punctuation → space
+    .replace(/\s+/g, ' ')              // collapse whitespace
+    .trim();
+}
+
+/**
+ * Strip the promoted step title from the beginning of a body container.
+ *
+ * Checks the first 1–3 consecutive meaningful block elements and removes them
+ * when their combined text matches the resolved step title (fuzzy comparison).
+ * This prevents duplicated bold headings from appearing at the top of step bodies.
+ *
+ * @param {string}  stepTitle - The resolved display title for the step
+ * @param {Element} bodyDiv   - The div whose leading children will be inspected/stripped
+ */
+function _stripPromotedTitleFromBody(stepTitle, bodyDiv) {
+  if (!stepTitle || !bodyDiv) return;
+
+  const normTitle = _normalizeTitleForComparison(stepTitle);
+  if (!normTitle) return;
+
+  // Collect up to 3 consecutive meaningful block elements from the start
+  const leadingEls = [];
+  for (const el of Array.from(bodyDiv.children)) {
+    if (leadingEls.length >= 3) break;
+    if (_HEADING_BLOCK_TAGS.has(el.tagName)) {
+      leadingEls.push(el);
+    } else {
+      break; // non-block element interrupts the heading run
+    }
+  }
+
+  if (leadingEls.length === 0) return;
+
+  // Title with trailing artifact digits stripped ("…VAT1" → "…VAT")
+  const normTitleStripped = normTitle.replace(/\s*\d+\s*$/, '').trim();
+
+  for (let count = 1; count <= leadingEls.length; count++) {
+    const subset = leadingEls.slice(0, count);
+    const combinedText = subset.map(el => el.textContent).join(' ');
+    const normCombined = _normalizeTitleForComparison(combinedText);
+
+    if (!normCombined) continue;
+
+    // Primary: exact match after normalization
+    if (normCombined === normTitle) {
+      subset.forEach(el => el.remove());
+      return;
+    }
+
+    // Fuzzy: also strip trailing artifact digits from combined text
+    const normCombinedStripped = normCombined.replace(/\s*\d+\s*$/, '').trim();
+    if (normTitleStripped && normCombinedStripped &&
+        normTitleStripped === normCombinedStripped) {
+      subset.forEach(el => el.remove());
+      return;
+    }
+  }
+}
+
 /**
  * Render step-by-step view (one step at a time with progress bar)
  */
@@ -480,13 +561,11 @@ function renderStepView() {
       }
     }
   }
-  // Strip the first body element if it exactly duplicates the display title
-  // (covers documents that echo the heading as the first body paragraph).
+  // Strip leading body elements that duplicate the display title.
+  // Uses fuzzy normalization to handle multi-paragraph headings, colon variants,
+  // and trailing artifact digits (e.g. "…VAT1" in title vs "…VAT" in body).
   if (displayTitle) {
-    const firstEl = bodyDiv.firstElementChild;
-    if (firstEl && firstEl.textContent.trim() === displayTitle) {
-      firstEl.remove();
-    }
+    _stripPromotedTitleFromBody(displayTitle, bodyDiv);
   }
   // If title is just the generic "STEP" / "Step" label (no number, no description),
   // promote the first body element as the real step title so that "STEP 1 / STEP / body"
