@@ -59,6 +59,10 @@ const Articles = {
   MIN_SUBSTANTIVE_TITLE_LENGTH: 8,
   /** Maximum characters to include in debug candidate preview strings. */
   DEBUG_TITLE_PREVIEW_LENGTH: 80,
+  /** Regex matching leading step-number tokens stripped before title comparison. */
+  TITLE_STEP_TOKEN_RE: /^(?:step)\s+\d+\s*[:\-–]?\s*/i,
+  /** Block-level element tags considered meaningful heading content for duplicate detection. */
+  HEADING_BLOCK_TAGS: new Set(['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI']),
   
   /**
    * Generate UUID v4 using crypto API for better randomness
@@ -1847,6 +1851,97 @@ const Articles = {
   },
 
   /**
+   * Normalize a title string for fuzzy duplicate comparison.
+   *
+   * Transformations applied (in order):
+   *   1. Lowercase
+   *   2. Strip leading step-number tokens: "STEP 1:", "Step 2 –", "STEP 1"
+   *   3. Replace colons and dashes with a single space
+   *   4. Collapse repeated whitespace
+   *   5. Trim
+   *
+   * @param {string} str - Raw title or body text
+   * @returns {string} Normalised string ready for comparison
+   */
+  normalizeTitleForComparison(str) {
+    return String(str || '')
+      .toLowerCase()
+      .replace(this.TITLE_STEP_TOKEN_RE, '') // strip leading step-number tokens
+      .replace(/[:\-–]/g, ' ')               // punctuation → space
+      .replace(/\s+/g, ' ')                  // collapse whitespace
+      .trim();
+  },
+
+  /**
+   * Strip the promoted step title from the beginning of a body container element.
+   *
+   * When a title has been extracted ("promoted") from the first bold / heading
+   * lines of a step body and stored as step.title, those same lines must be
+   * removed from the body so they do not render twice.
+   *
+   * The comparison is intentionally fuzzy to handle common document patterns:
+   *   - Exact duplicate          → "Delete delivery" vs <p><strong>Delete delivery</strong></p>
+   *   - Multi-paragraph heading  → title spans two consecutive <p> elements
+   *   - Trailing artifact digit  → "…VAT1" (title) vs "…VAT" (body), where the "1"
+   *                                was an artifact of the extraction step
+   *
+   * Only the FIRST 1–3 consecutive meaningful block elements are inspected.
+   * Content further into the body is never touched.
+   *
+   * @param {string}  stepTitle  - The resolved step title (may include "Step N:" prefix)
+   * @param {Element} container  - The DOM element whose leading children will be stripped
+   */
+  stripPromotedTitleFromBody(stepTitle, container) {
+    if (!stepTitle || !container) return;
+
+    const normTitle = this.normalizeTitleForComparison(stepTitle);
+    if (!normTitle) return;
+
+    // Meaningful block element tags (inline elements, <br>, etc. are skipped)
+    const blockTags = this.HEADING_BLOCK_TAGS;
+
+    // Collect the first up to 3 consecutive meaningful block elements
+    const leadingEls = [];
+    for (const el of Array.from(container.children)) {
+      if (leadingEls.length >= 3) break;
+      if (blockTags.has(el.tagName)) {
+        leadingEls.push(el);
+      } else {
+        break; // non-block element interrupts the heading run
+      }
+    }
+
+    if (leadingEls.length === 0) return;
+
+    // Pre-compute the title with trailing artifact digits stripped.
+    // "…VAT1" becomes "…VAT" so it can match "…VAT" in the body.
+    const normTitleStripped = normTitle.replace(/\s*\d+\s*$/, '').trim();
+
+    // Try subsets of increasing size: [1 element], [2 elements], [3 elements]
+    for (let count = 1; count <= leadingEls.length; count++) {
+      const subset = leadingEls.slice(0, count);
+      const combinedText = subset.map(el => el.textContent).join(' ');
+      const normCombined = this.normalizeTitleForComparison(combinedText);
+
+      if (!normCombined) continue;
+
+      // Primary: exact match after normalization
+      if (normCombined === normTitle) {
+        subset.forEach(el => el.remove());
+        return;
+      }
+
+      // Fuzzy: also strip trailing artifact digits from the combined text
+      const normCombinedStripped = normCombined.replace(/\s*\d+\s*$/, '').trim();
+      if (normTitleStripped && normCombinedStripped &&
+          normTitleStripped === normCombinedStripped) {
+        subset.forEach(el => el.remove());
+        return;
+      }
+    }
+  },
+
+  /**
    * Convert markdown to HTML (simple implementation)
    * @param {string} markdown - Markdown content
    * @returns {string} HTML content
@@ -2222,13 +2317,11 @@ const Articles = {
         }
       }
 
-      // Strip leading body element when it exactly duplicates the title
-      // (covers documents that repeat the heading as the first body paragraph).
+      // Strip leading body elements that duplicate the effective title.
+      // Uses fuzzy normalization to handle multi-paragraph headings, colon
+      // variants, and trailing artifact digits (e.g. "VAT1" vs "VAT").
       if (effectiveTitle) {
-        firstChild = allContent.firstElementChild;
-        if (firstChild && firstChild.textContent.trim() === effectiveTitle) {
-          firstChild.remove();
-        }
+        this.stripPromotedTitleFromBody(effectiveTitle, allContent);
       }
 
       // Safety fallback: use generic step label when no title could be resolved.
@@ -2526,11 +2619,10 @@ const Articles = {
           img.remove();
         }
       });
-      // Strip leading body element that duplicates the title
-      const firstEl = currentDiv.firstElementChild;
-      if (firstEl && firstEl.textContent.trim() === currentTitle) {
-        firstEl.remove();
-      }
+      // Strip leading body elements that duplicate the resolved title.
+      // Uses fuzzy normalization to handle multi-paragraph headings, colon
+      // variants, and trailing artifact digits (e.g. "VAT1" vs "VAT").
+      this.stripPromotedTitleFromBody(currentTitle, currentDiv);
       const sanitized = this.sanitizeHtmlContent(currentDiv);
       steps.push({ title: currentTitle, bodyHtml: sanitized.innerHTML, images });
       currentTitle = null;
