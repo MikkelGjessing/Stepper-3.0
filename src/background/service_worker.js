@@ -476,17 +476,35 @@ const SN_BODY_FIELDS =
   'sys_id,number,short_description,text,description,article,body,content,sys_updated_on';
 
 /**
+ * Extract the clean base URL (origin + pathname only) from a stored base URL,
+ * discarding any query parameters or fragments the user may have included.
+ * @param {string} baseUrl
+ * @returns {string} Clean URL containing only origin + pathname
+ */
+function getCleanBaseUrl(baseUrl) {
+  const { origin, pathname } = new URL(baseUrl);
+  return new URL(pathname, origin).toString();
+}
+
+/**
  * Build a ServiceNow Knowledge API URL with pagination parameters.
  * Includes an explicit sysparm_fields list so the list endpoint returns full
  * body/content fields alongside the normal metadata.
- * @param {string} baseUrl
- * @param {string} filter - raw sysparm_query value (not yet encoded)
+ *
+ * Only the origin and pathname of baseUrl are used; any query parameters
+ * present in the stored value are discarded so that all query parameters are
+ * always constructed here and appended programmatically.
+ *
+ * @param {string} baseUrl - Base endpoint URL (only origin + pathname are used)
+ * @param {string} filter  - raw sysparm_query value (not yet encoded)
  * @param {number} limit
  * @param {number} offset
  * @returns {string}
  */
 function buildServiceNowUrl(baseUrl, filter, limit, offset) {
-  const url = new URL(baseUrl);
+  // Strip any query params from the stored base URL so that the URL field
+  // accepts a plain base endpoint and all query parameters are built here.
+  const url = new URL(getCleanBaseUrl(baseUrl));
   if (filter) url.searchParams.set('sysparm_query', filter);
   url.searchParams.set('sysparm_fields', SN_BODY_FIELDS);
   url.searchParams.set('sysparm_limit', String(limit));
@@ -626,8 +644,8 @@ async function fetchServiceNowArticleDetail(articleRef, sn) {
   // Prefer sys_id for the detail request – it is stable and unambiguous
   if (articleRef.sys_id && typeof articleRef.sys_id === 'string') {
     identifier = articleRef.sys_id;
-    const base = sn.baseUrl.replace(/\/+$/, '');
-    const u = new URL(`${base}/${encodeURIComponent(identifier)}`);
+    const cleanBase = getCleanBaseUrl(sn.baseUrl).replace(/\/+$/, '');
+    const u = new URL(`${cleanBase}/${encodeURIComponent(identifier)}`);
     u.searchParams.set('sysparm_fields', SN_BODY_FIELDS);
     detailUrl = u.toString();
   } else if (articleRef.link && typeof articleRef.link === 'string') {
@@ -649,8 +667,8 @@ async function fetchServiceNowArticleDetail(articleRef, sn) {
       );
       return null;
     }
-    const base = sn.baseUrl.replace(/\/+$/, '');
-    const u = new URL(`${base}/${encodeURIComponent(identifier)}`);
+    const cleanBase = getCleanBaseUrl(sn.baseUrl).replace(/\/+$/, '');
+    const u = new URL(`${cleanBase}/${encodeURIComponent(identifier)}`);
     u.searchParams.set('sysparm_fields', SN_BODY_FIELDS);
     detailUrl = u.toString();
   }
