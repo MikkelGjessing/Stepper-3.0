@@ -631,14 +631,14 @@ async function updateSnInfo() {
     }
     parts.push(`Articles stored: ${count}`);
 
-    // Show detailed sync stats when available (indexCount / fetchedCount / skippedCount / parsedCount)
+    // Show detailed sync stats when available (indexCount / fetchedCount / partialCount / parsedCount)
     if (sn.syncStats) {
-      const { indexCount, fetchedCount, skippedCount, parsedCount } = sn.syncStats;
+      const { indexCount, fetchedCount, partialCount, parsedCount } = sn.syncStats;
       const statParts = [];
       if (indexCount   != null) statParts.push(`${indexCount} found`);
       if (fetchedCount != null) statParts.push(`${fetchedCount} fetched`);
-      if (skippedCount != null) statParts.push(`${skippedCount} skipped`);
-      if (parsedCount  != null) statParts.push(`${parsedCount} parsed`);
+      if (partialCount != null && partialCount > 0) statParts.push(`${partialCount} partial`);
+      if (parsedCount  != null) statParts.push(`${parsedCount} stored`);
       if (statParts.length > 0) parts.push(statParts.join(', '));
     }
 
