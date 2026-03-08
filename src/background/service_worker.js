@@ -289,8 +289,11 @@ async function runServiceNowSync(sn) {
     }
 
     // ── Phase 2: enrich each article with full body content ──────────────────
+    // Best-effort mode: always include every article regardless of body length.
+    // Articles with short/missing bodies are stored with parseStatus='missing_content'
+    // so they can still be searched and opened.
     const fullArticles = [];
-    const skippedArticles = [];
+    let partialBodyCount = 0;
 
     for (const indexArticle of indexArticles) {
       if (hasFullBody(indexArticle)) {
@@ -302,56 +305,41 @@ async function runServiceNowSync(sn) {
         );
         fullArticles.push(indexArticle);
       } else {
-        // Need a second request to retrieve the full article body
+        // Attempt to fetch the full article record; use whatever we get back.
         const detail = await fetchServiceNowArticleDetail(indexArticle, sn);
-        if (detail && hasFullBody(detail)) {
-          fullArticles.push({ ...indexArticle, ...detail });
-        } else {
+        const merged = detail ? { ...indexArticle, ...detail } : indexArticle;
+        if (!hasFullBody(merged)) {
           const title = indexArticle.short_description || indexArticle.sys_id || '(unknown)';
-          console.warn(`[ServiceNow] Skipping "${title}": detail content missing`);
-          skippedArticles.push({ title, reason: 'detail content missing' });
+          console.warn(
+            `[ServiceNow] Article "${title}": body content short/missing – stored with best-effort parsing`
+          );
+          partialBodyCount++;
         }
+        fullArticles.push(merged);
       }
     }
 
     console.log(
-      `[ServiceNow] Full articles ready: ${fullArticles.length} | missing body (skipped): ${skippedArticles.length}`
+      `[ServiceNow] Articles ready: ${fullArticles.length}` +
+      (partialBodyCount > 0 ? ` (${partialBodyCount} with partial/missing body)` : '')
     );
-
-    if (fullArticles.length === 0) {
-      const msg =
-        `All ${indexArticles.length} article(s) skipped: full content could not be retrieved`;
-      await persistServiceNowSyncMeta(sn, null, msg, 0, {
-        indexCount: indexArticles.length,
-        fetchedCount: 0,
-        skippedCount: skippedArticles.length,
-        parsedCount: 0
-      });
-      return {
-        success: false,
-        count: 0,
-        message: msg,
-        indexCount: indexArticles.length,
-        fetchedCount: 0,
-        skippedCount: skippedArticles.length,
-        parsedCount: 0
-      };
-    }
 
     // ── Phase 3: import / upsert articles ────────────────────────────────────
     const { upserted, stale, errors } = await ingestServiceNowArticles(fullArticles, syncedAt);
 
     const message =
       `Synced ${upserted} ServiceNow article(s)` +
-      ` (${indexArticles.length} found, ${skippedArticles.length} skipped)` +
+      ` (${indexArticles.length} found` +
+      (partialBodyCount > 0 ? `, ${partialBodyCount} partial` : '') +
+      `)` +
       (stale > 0 ? ` · ${stale} marked stale` : '') +
       (errors.length > 0 ? ` · ${errors.length} error(s)` : '');
 
     const syncStats = {
-      indexCount: indexArticles.length,
-      fetchedCount: fullArticles.length,
-      skippedCount: skippedArticles.length,
-      parsedCount: upserted
+      indexCount:    indexArticles.length,
+      fetchedCount:  fullArticles.length,
+      partialCount:  partialBodyCount,
+      parsedCount:   upserted
     };
 
     await persistServiceNowSyncMeta(sn, syncedAt, null, upserted, syncStats);
@@ -789,8 +777,8 @@ async function ingestServiceNowArticles(rawArticles, syncedAt) {
 
       // Determine parse status for storage / debugging
       const parseStatus =
-        steps.length > 1  ? 'parsed'   :
-        rawBodyLength > 0 ? 'fallback' : 'empty';
+        steps.length > 1  ? 'parsed_structured' :
+        rawBodyLength > 0 ? 'parsed_fallback'   : 'missing_content';
 
       if (rawBodyLength === 0) missingBodyCount++;
 

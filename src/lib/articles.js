@@ -3106,7 +3106,16 @@ const Articles = {
           ...new Set([...normalizedArticle.tags, ...snTags])
         ];
 
-        console.log(`[Stepper] Article imported (servicenow): title="${title}" | titleSource=${titleSource} | steps=${steps.length}`);
+        // Determine parse status (best-effort; never blocks storage)
+        const rawBodyLength = rawHtml.trim().length;
+        const parseStatus =
+          parserMeta && parserMeta.parserName !== 'fallbackSingleStepParser'
+            ? 'parsed_structured'
+            : rawBodyLength > 0
+              ? 'parsed_fallback'
+              : 'missing_content';
+
+        console.log(`[Stepper] Article imported (servicenow): title="${title}" | titleSource=${titleSource} | steps=${steps.length} | parseStatus=${parseStatus}`);
 
         const article = {
           // Stable ID: reuse existing record if present, else create new UUID
@@ -3123,6 +3132,7 @@ const Articles = {
           estimatedMinutes: null,
           steps,
           parserMeta,
+          parseStatus,
           source: 'servicenow',
           remoteId,
           syncedAt,
