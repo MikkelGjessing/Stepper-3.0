@@ -2420,10 +2420,12 @@ const Articles = {
     const headers = Array.from(headerRow.querySelectorAll('th, td'))
       .map(cell => cell.textContent.trim().toLowerCase());
 
-    const STEP_COL  = /^(?:step|no\.?|#|nr\.?|step\s*#)$/i;
+    const STEP_COL   = /^(?:step|no\.?|#|nr\.?|step\s*#)$/i;
     const ACTION_COL = /^(?:action|instruction|task|description|details?|procedure|what\s+to\s+do|activity)$/i;
     const NOTE_COL   = /^(?:note|notes|warning|tip|important|remark|comment)$/i;
-    const IMAGE_COL  = /^(?:image|screenshot|figure|visual|img|illustration)$/i;
+    // Matches single-word image headers AND compound "Image & details" / "Image and details" /
+    // "Image/details" variants commonly found in DOCX work-instruction procedure tables.
+    const IMAGE_COL  = /^(?:image(?:\s*(?:&|and|\/)\s*details?)?|screenshot|figure|visual|img|illustration)$/i;
 
     const actionColIdx = headers.findIndex(h => ACTION_COL.test(h));
     const stepColIdx   = headers.findIndex(h => STEP_COL.test(h));
@@ -2431,8 +2433,9 @@ const Articles = {
     // Table is procedural only if it has an action column or a step number column
     if (actionColIdx < 0 && stepColIdx < 0) return steps;
 
-    const noteColIdx = headers.findIndex(h => NOTE_COL.test(h));
-    const mainColIdx = actionColIdx >= 0 ? actionColIdx : 0;
+    const noteColIdx  = headers.findIndex(h => NOTE_COL.test(h));
+    const imageColIdx = headers.findIndex(h => IMAGE_COL.test(h));
+    const mainColIdx  = actionColIdx >= 0 ? actionColIdx : 0;
 
     // Data rows: skip thead rows
     const dataRows = table.querySelector('thead')
@@ -2461,23 +2464,35 @@ const Articles = {
 
       // Extract images from all cells in the row (modifies cell DOM in-place)
       // so that bodyParts built below captures the sanitized src values.
+      // For the dedicated image/details column we collect explicitly; the
+      // all-cells pass catches images embedded in any other column too.
       const images = [];
       cells.forEach(cell => {
         ArticleNormalizer.extractImages(cell).forEach(img => images.push(img));
       });
 
-      // Build body HTML: main cell + any additional detail/note columns
-      // (captured after image extraction so src values are already sanitized)
+      // Build body HTML: main cell + any additional detail/note columns.
+      // Captured after image extraction so src values are already sanitized.
+      // IMAGE_COL cells are included even when they contain no text so that
+      // screenshots embedded as bare <img> tags are preserved in bodyHtml
+      // (the UI renders images from bodyHtml, not from the images[] metadata).
       const bodyParts = [mainCell.innerHTML];
       cells.forEach((cell, idx) => {
         if (idx === mainColIdx || idx === stepColIdx) return;
-        const cellText = cell.textContent.trim();
-        if (!cellText) return;
         const header = headers[idx] || '';
         if (NOTE_COL.test(header)) {
-          bodyParts.push(`<p class="step-note"><strong>Note:</strong> ${cell.innerHTML}</p>`);
-        } else if (!IMAGE_COL.test(header)) {
-          bodyParts.push(cell.innerHTML);
+          const cellText = cell.textContent.trim();
+          if (cellText) bodyParts.push(`<p class="step-note"><strong>Note:</strong> ${cell.innerHTML}</p>`);
+        } else if (IMAGE_COL.test(header)) {
+          // Image/details column: include even when the cell has no text (image-only).
+          // After extractImages() the img src attributes are already sanitized; invalid
+          // images have been removed from the cell DOM, so querySelector is safe.
+          if (cell.querySelector('img') || cell.textContent.trim()) {
+            bodyParts.push(cell.innerHTML);
+          }
+        } else {
+          const cellText = cell.textContent.trim();
+          if (cellText) bodyParts.push(cell.innerHTML);
         }
       });
 
