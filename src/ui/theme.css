@@ -1,0 +1,14 @@
+/* Nexi Digital Brand Theme */
+:root {
+  /* Color Palette */
+  --nexi-blue: #2d32aa;
+  --nexi-blue-dark: #252986;
+  --nexi-white: #ffffff;
+  --nexi-grey: #f6f7f9;
+  --nexi-light-blue: #2BD4D9;
+  --nexi-teal: #00B49D;
+  --nexi-coral: #FF6065;
+
+  /* Typography */
+  --font-family: "Karbon", Inter, "Segoe UI", system-ui, sans-serif;
+}

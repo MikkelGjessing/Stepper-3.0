@@ -9,6 +9,7 @@ html, body {
 }
 
 body {
+  font-family: var(--font-family);
   background: #1a1a1a;
   color: #fff;
   min-height: 100vh;
@@ -22,19 +23,20 @@ body {
   position: fixed;
   top: 16px;
   right: 16px;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--nexi-blue);
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 6px;
+  border: none;
+  border-radius: 8px;
   padding: 8px 18px;
   font-size: 14px;
+  font-family: var(--font-family);
   cursor: pointer;
   z-index: 10;
   transition: background 0.15s;
 }
 
 .viewer-close:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--nexi-blue-dark);
 }
 
 .viewer-image-wrap {

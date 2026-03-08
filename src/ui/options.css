@@ -6,10 +6,10 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--font-family);
   font-size: 14px;
   color: #333;
-  background: #f5f5f5;
+  background: var(--nexi-grey);
   line-height: 1.6;
 }
 
@@ -25,7 +25,7 @@ body {
 /* Header */
 .header {
   padding: 40px 60px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--nexi-blue);
   color: white;
   text-align: center;
 }
@@ -51,7 +51,7 @@ body {
 .settings-section {
   margin-bottom: 40px;
   padding: 24px;
-  background: #fafafa;
+  background: var(--nexi-grey);
   border-radius: 8px;
   border: 1px solid #e0e0e0;
 }
@@ -89,11 +89,11 @@ body {
 
 .input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--nexi-blue);
 }
 
 .input:disabled {
-  background: #f5f5f5;
+  background: var(--nexi-grey);
   cursor: not-allowed;
 }
 
@@ -123,8 +123,8 @@ body {
 }
 
 .radio-label:hover {
-  border-color: #667eea;
-  background: #f8f9ff;
+  border-color: var(--nexi-blue);
+  background: var(--nexi-grey);
 }
 
 .radio-label input[type="radio"] {
@@ -132,7 +132,7 @@ body {
 }
 
 .radio-label input[type="radio"]:checked + span {
-  color: #667eea;
+  color: var(--nexi-blue);
   font-weight: 500;
 }
 
@@ -149,8 +149,8 @@ body {
 }
 
 .checkbox-label:hover {
-  border-color: #667eea;
-  background: #f8f9ff;
+  border-color: var(--nexi-blue);
+  background: var(--nexi-grey);
 }
 
 .checkbox {
@@ -175,13 +175,13 @@ body {
 }
 
 .btn-primary {
-  background: #667eea;
+  background: var(--nexi-blue);
   color: white;
 }
 
 .btn-primary:hover {
-  background: #5568d3;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  background: var(--nexi-blue-dark);
+  box-shadow: 0 4px 12px rgba(45, 50, 170, 0.3);
 }
 
 .btn-secondary {
@@ -191,8 +191,8 @@ body {
 }
 
 .btn-secondary:hover {
-  border-color: #667eea;
-  color: #667eea;
+  border-color: var(--nexi-blue);
+  color: var(--nexi-blue);
 }
 
 .btn:disabled {
@@ -248,7 +248,7 @@ body {
 .footer {
   padding: 20px;
   text-align: center;
-  background: #fafafa;
+  background: var(--nexi-grey);
   border-top: 1px solid #e0e0e0;
   color: #666;
   font-size: 12px;

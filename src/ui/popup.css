@@ -15,10 +15,10 @@ img {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--font-family);
   font-size: 14px;
   color: #333;
-  background: #f5f5f5;
+  background: var(--nexi-grey);
   overflow: hidden;
 }
 
@@ -39,7 +39,7 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--nexi-blue);
   color: white;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
@@ -101,12 +101,12 @@ body {
 
 .search-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--nexi-blue);
 }
 
 .search-btn {
   padding: 10px 20px;
-  background: #667eea;
+  background: var(--nexi-blue);
   color: white;
   border: none;
   border-radius: 8px;
@@ -116,7 +116,7 @@ body {
 }
 
 .search-btn:hover {
-  background: #5568d3;
+  background: var(--nexi-blue-dark);
 }
 
 /* Results Content */
@@ -125,7 +125,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fafafa;
+  background: var(--nexi-grey);
 }
 
 .panel-header {
@@ -162,13 +162,13 @@ body {
 }
 
 .result-item:hover {
-  border-color: #667eea;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+  border-color: var(--nexi-blue);
+  box-shadow: 0 2px 8px rgba(45, 50, 170, 0.1);
 }
 
 .result-item.active {
-  border-color: #667eea;
-  background: #f0f4ff;
+  border-color: var(--nexi-blue);
+  background: rgba(45, 50, 170, 0.06);
 }
 
 .result-item-title {
@@ -193,7 +193,7 @@ body {
   display: flex;
   gap: 12px;
   font-size: 11px;
-  color: #667eea;
+  color: var(--nexi-blue);
 }
 
 .result-item-steps {
@@ -206,7 +206,7 @@ body {
 
 .result-item-category {
   font-size: 11px;
-  color: #667eea;
+  color: var(--nexi-blue);
   margin-bottom: 4px;
 }
 
@@ -311,7 +311,7 @@ body {
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--nexi-blue);
   transition: width 0.3s ease;
 }
 
@@ -503,8 +503,8 @@ body {
 
 .full-article-step {
   padding: 20px;
-  background: #f8f9fa;
-  border-left: 4px solid #667eea;
+  background: var(--nexi-grey);
+  border-left: 4px solid var(--nexi-blue);
   border-radius: 8px;
   position: relative;
   transition: all 0.3s ease;
@@ -545,7 +545,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #667eea;
+  background: var(--nexi-blue);
   color: white;
   border-radius: 50%;
   font-weight: 600;
@@ -604,8 +604,8 @@ body {
 .article-summary {
   margin-bottom: 16px;
   padding: 12px;
-  background: #f0f4ff;
-  border-left: 3px solid #667eea;
+  background: var(--nexi-grey);
+  border-left: 3px solid var(--nexi-blue);
   border-radius: 4px;
 }
 
@@ -618,7 +618,7 @@ body {
 .article-category {
   display: inline-block;
   padding: 4px 12px;
-  background: #667eea;
+  background: var(--nexi-blue);
   color: white;
   border-radius: 12px;
   font-size: 12px;
@@ -634,13 +634,13 @@ body {
   margin-bottom: 20px;
   padding: 16px;
   background: #f9f9f9;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--nexi-blue);
   border-radius: 6px;
 }
 
 .step-number {
   font-weight: 600;
-  color: #667eea;
+  color: var(--nexi-blue);
   margin-bottom: 8px;
 }
 
@@ -718,7 +718,7 @@ body {
   display: flex;
   gap: 8px;
   padding: 12px 20px;
-  background: #fafafa;
+  background: var(--nexi-grey);
   border-top: 1px solid #e0e0e0;
 }
 
@@ -735,7 +735,7 @@ body {
 
 .footer-btn:hover {
   background: #f0f0f0;
-  border-color: #667eea;
+  border-color: var(--nexi-blue);
 }
 
 /* Scrollbar Styles */
@@ -763,7 +763,7 @@ body {
 .progress-container {
   margin-bottom: 24px;
   padding: 16px;
-  background: #f8f9fa;
+  background: var(--nexi-grey);
   border-radius: 8px;
 }
 
@@ -782,7 +782,7 @@ body {
 
 .progress-percentage {
   font-weight: 600;
-  color: #667eea;
+  color: var(--nexi-blue);
   font-size: 14px;
 }
 
@@ -795,7 +795,7 @@ body {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  background: var(--nexi-blue);
   transition: width 0.3s ease;
 }
 
@@ -861,10 +861,10 @@ body {
 
 .image-alt-text {
   padding: 16px;
-  background: #f0f4ff;
-  border: 1px solid #667eea;
+  background: var(--nexi-grey);
+  border: 1px solid var(--nexi-blue);
   border-radius: 8px;
-  color: #667eea;
+  color: var(--nexi-blue);
   text-align: center;
   margin: 10px 0;
 }
@@ -888,13 +888,13 @@ body {
 }
 
 .primary-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--nexi-blue);
   color: white;
 }
 
 .primary-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(45, 50, 170, 0.4);
 }
 
 .primary-btn:disabled {
@@ -936,8 +936,8 @@ body {
 }
 
 .action-btn:hover {
-  border-color: #667eea;
-  background: #f0f4ff;
+  border-color: var(--nexi-blue);
+  background: var(--nexi-grey);
 }
 
 .warning-btn {
@@ -974,7 +974,7 @@ body {
 
 .completion-summary h3 {
   font-size: 20px;
-  color: #667eea;
+  color: var(--nexi-blue);
   margin-bottom: 24px;
 }
 
@@ -984,7 +984,7 @@ body {
   gap: 32px;
   margin: 32px 0;
   padding: 24px;
-  background: #f8f9fa;
+  background: var(--nexi-grey);
   border-radius: 8px;
 }
 
@@ -997,7 +997,7 @@ body {
 .stat-value {
   font-size: 28px;
   font-weight: 600;
-  color: #667eea;
+  color: var(--nexi-blue);
   margin-bottom: 4px;
 }
 
@@ -1028,7 +1028,7 @@ body {
 .completed-steps-list li {
   padding: 8px 12px;
   margin-bottom: 4px;
-  background: #f0f4ff;
+  background: var(--nexi-grey);
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -1132,7 +1132,7 @@ body {
   flex: 1;
   max-width: 150px;
   padding: 16px;
-  background: #f0f4ff;
+  background: var(--nexi-grey);
   border-radius: 8px;
   text-align: center;
 }
@@ -1144,7 +1144,7 @@ body {
 .metric-value {
   font-size: 28px;
   font-weight: 600;
-  color: #667eea;
+  color: var(--nexi-blue);
   margin-bottom: 4px;
 }
 
@@ -1205,7 +1205,7 @@ body {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: #f8f9fa;
+  background: var(--nexi-grey);
   border-radius: 8px;
   transition: all 0.2s;
 }
@@ -1252,7 +1252,7 @@ body {
 .completion-step-number {
   font-size: 11px;
   font-weight: 600;
-  color: #667eea;
+  color: var(--nexi-blue);
   text-transform: uppercase;
 }
 
@@ -1311,7 +1311,7 @@ body {
 }
 
 .image-preview:focus {
-  box-shadow: 0 0 0 2px #667eea;
+  box-shadow: 0 0 0 2px var(--nexi-blue);
 }
 
 .image-thumb {
