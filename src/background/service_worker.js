@@ -466,11 +466,19 @@ const SN_BODY_FIELDS =
 /**
  * Extract the clean base URL (origin + pathname only) from a stored base URL,
  * discarding any query parameters or fragments the user may have included.
+ *
+ * Pre-strips the query string before calling new URL() so that stored values
+ * containing ServiceNow encoded-query characters (e.g. '^', '>') in the query
+ * portion do not cause "Failed to construct 'URL': Invalid URL" errors.
+ *
  * @param {string} baseUrl
  * @returns {string} Clean URL containing only origin + pathname
  */
 function getCleanBaseUrl(baseUrl) {
-  const { origin, pathname } = new URL(baseUrl);
+  // Remove any query string or fragment before parsing so that invalid
+  // characters in an existing query (e.g. '^') don't throw on new URL().
+  const stripped = baseUrl.split('?')[0].split('#')[0];
+  const { origin, pathname } = new URL(stripped);
   return new URL(pathname, origin).toString();
 }
 
@@ -481,7 +489,8 @@ function getCleanBaseUrl(baseUrl) {
  *
  * Only the origin and pathname of baseUrl are used; any query parameters
  * present in the stored value are discarded so that all query parameters are
- * always constructed here and appended programmatically.
+ * always constructed here and appended programmatically via URLSearchParams,
+ * which ensures the filter value is encoded exactly once (no double-encoding).
  *
  * @param {string} baseUrl - Base endpoint URL (only origin + pathname are used)
  * @param {string} filter  - raw sysparm_query value (not yet encoded)
@@ -497,6 +506,7 @@ function buildServiceNowUrl(baseUrl, filter, limit, offset) {
   url.searchParams.set('sysparm_fields', SN_BODY_FIELDS);
   url.searchParams.set('sysparm_limit', String(limit));
   url.searchParams.set('sysparm_offset', String(offset));
+  console.log('ServiceNow API URL:', url.toString());
   return url.toString();
 }
 
