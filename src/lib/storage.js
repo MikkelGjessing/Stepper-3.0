@@ -8,7 +8,7 @@
  * Edit this object to rotate credentials or change the default endpoint/filter.
  *
  * ── WHERE TO CHANGE DEFAULTS ──────────────────────────────────────────────────
- *   baseUrl  : ServiceNow Knowledge API endpoint (sn_km_api plugin required)
+ *   baseUrl  : ServiceNow Table API endpoint for kb_knowledge records
  *   filter   : sysparm_query filter string (URL-encoded in the fetch call)
  *   username : ServiceNow basic-auth username  ← rotate here
  *   password : ServiceNow basic-auth password  ← rotate here
@@ -17,10 +17,10 @@
 function defaultServiceNowSettings() {
   return {
     enabled: true,
-    // ServiceNow Knowledge Management REST API endpoint (requires sn_km_api plugin)
-    baseUrl: 'https://nets.service-now.com/api/sn_km_api/knowledge/articles',
-    // Default filter: published articles with > 100 views
-    filter: 'workflow_state=published^sys_view_count>100',
+    // ServiceNow Table API endpoint for kb_knowledge records
+    baseUrl: 'https://nets.service-now.com/api/now/table/kb_knowledge',
+    // Default filter: published articles
+    filter: 'workflow_state=published',
     username: 'Co-Pilot',
     password: 'ejSHm*ScWIfV576@Z90rOoqF4wofHMX#mVOC|YSn',
     autoSyncWeekly: true,
@@ -45,6 +45,13 @@ function migrateServiceNowPlaceholders(sn) {
   }
   if (migrated.password === '__SERVICENOW_PASSWORD__') {
     migrated.password = realDefaults.password;
+  }
+  // Migrate legacy sn_km_api endpoint to the Table API endpoint
+  if (
+    migrated.baseUrl &&
+    migrated.baseUrl.includes('/api/sn_km_api/knowledge/articles')
+  ) {
+    migrated.baseUrl = realDefaults.baseUrl;
   }
   return migrated;
 }

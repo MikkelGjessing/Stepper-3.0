@@ -244,14 +244,17 @@ async function handleTestServiceNow(snSettings) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    // Lightweight test: fetch with limit=1 to verify connectivity and auth
-    const url = buildServiceNowUrl(sn.baseUrl, sn.filter, 1, 0);
+    // Use sys_user with limit=1 to verify credentials independently of kb_knowledge ACLs
+    const origin = new URL(getCleanBaseUrl(sn.baseUrl)).origin;
+    const testUrl = new URL('/api/now/table/sys_user', origin);
+    testUrl.searchParams.set('sysparm_limit', '1');
+
     // NOTE: Authorization header is intentionally not logged
-    const response = await fetch(url, {
+    const response = await fetch(testUrl.toString(), {
       method: 'GET',
       headers: {
-        'Accept': 'application/json',
-        'Authorization': buildBasicAuthHeader(sn.username, sn.password)
+        'Authorization': buildBasicAuthHeader(sn.username, sn.password),
+        'Accept': 'application/json'
       },
       signal: controller.signal
     });
@@ -261,6 +264,9 @@ async function handleTestServiceNow(snSettings) {
     if (response.ok) {
       return { success: true, message: 'Connection successful' };
     }
+
+    const responseBody = await response.text().catch(() => '');
+    console.error('ServiceNow test connection error', { status: response.status, responseBody });
     return { success: false, message: classifyHttpError(response.status) };
   } catch (err) {
     return { success: false, message: classifyNetworkError(err) };
@@ -378,6 +384,8 @@ async function fetchServiceNowArticleIndex(sn) {
     }
 
     if (!response.ok) {
+      const responseBody = await response.text().catch(() => '');
+      console.error('ServiceNow API error', { status: response.status, responseBody });
       throw new Error(classifyHttpError(response.status));
     }
 
@@ -1057,8 +1065,9 @@ function htmlToPlainText(html) {
 
 
 function classifyHttpError(status) {
-  if (status === 401 || status === 403) return 'Authentication failed: check username and password';
-  if (status === 404) return 'Knowledge API endpoint not found: verify Base URL points to /api/now/table/kb_knowledge and the Table API is accessible';
+  if (status === 401) return 'Invalid credentials: check username and password';
+  if (status === 403) return 'User lacks permission to read kb_knowledge table';
+  if (status === 404) return 'API endpoint not found: verify the Base URL and that the Table API is accessible';
   return `HTTP ${status}: request failed`;
 }
 
