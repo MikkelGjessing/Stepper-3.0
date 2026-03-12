@@ -54,6 +54,15 @@ const formFields = {
   llmModel: document.getElementById('llmModel')
 };
 
+// Chat DOM elements
+const enableChat = document.getElementById('enableChat');
+const chatFields = document.getElementById('chatFields');
+const chatBackendUrl = document.getElementById('chatBackendUrl');
+const allowCurrentArticleChat = document.getElementById('allowCurrentArticleChat');
+const allowKnowledgeBaseChat = document.getElementById('allowKnowledgeBaseChat');
+const chatTestBtn = document.getElementById('chatTestBtn');
+const chatStatus = document.getElementById('chatStatus');
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('Options page loaded');
@@ -77,6 +86,10 @@ function setupEventListeners() {
   snEnabled.addEventListener('change', toggleSnFields);
   snTestBtn.addEventListener('click', handleSnTest);
   snExtractBtn.addEventListener('click', handleSnExtract);
+
+  // Chat toggle + test
+  enableChat.addEventListener('change', toggleChatFields);
+  chatTestBtn.addEventListener('click', handleChatTest);
   
   // Form submission
   settingsForm.addEventListener('submit', handleSaveSettings);
@@ -142,6 +155,13 @@ async function loadSettings() {
     toggleSnFields();
     
     toggleLLMSection();
+
+    // Load chat settings
+    enableChat.checked = settings.enableChat === true;
+    chatBackendUrl.value = settings.chatBackendUrl || '';
+    allowCurrentArticleChat.checked = settings.allowCurrentArticleChat !== false;
+    allowKnowledgeBaseChat.checked = settings.allowKnowledgeBaseChat !== false;
+    toggleChatFields();
     
   } catch (error) {
     console.error('Error loading settings:', error);
@@ -178,6 +198,55 @@ function toggleLLMSection() {
   }
 }
 
+// Toggle chat fields visibility
+function toggleChatFields() {
+  chatFields.style.display = enableChat.checked ? 'block' : 'none';
+}
+
+// Test chat backend connection
+async function handleChatTest() {
+  const url = chatBackendUrl.value.trim();
+  if (!url) {
+    showChatStatus('Please enter a Chat backend URL first.', 'error');
+    return;
+  }
+  chatTestBtn.disabled = true;
+  chatTestBtn.textContent = '⏳ Testing…';
+  showChatStatus('Testing connection…', 'info');
+  try {
+    const healthUrl = url.replace(/\/$/, '') + '/health';
+    const res = await fetch(healthUrl);
+    if (res.ok) {
+      showChatStatus('✓ Backend is reachable', 'success');
+    } else {
+      showChatStatus(`✗ Backend returned ${res.status}`, 'error');
+    }
+  } catch (err) {
+    showChatStatus('✗ Could not reach backend: ' + err.message, 'error');
+  } finally {
+    chatTestBtn.disabled = false;
+    chatTestBtn.textContent = '🔌 Test connection';
+  }
+}
+
+let _chatStatusTimer = null;
+function showChatStatus(message, type = 'info') {
+  if (_chatStatusTimer !== null) {
+    clearTimeout(_chatStatusTimer);
+    _chatStatusTimer = null;
+  }
+  chatStatus.textContent = message;
+  chatStatus.style.color =
+    type === 'success' ? '#28a745' :
+    type === 'error'   ? '#dc3545' :
+    '#666';
+  chatStatus.style.fontWeight = '500';
+  _chatStatusTimer = setTimeout(() => {
+    chatStatus.textContent = '';
+    _chatStatusTimer = null;
+  }, 10000);
+}
+
 // Handle save settings
 async function handleSaveSettings(event) {
   event.preventDefault();
@@ -201,6 +270,11 @@ async function handleSaveSettings(event) {
       llmEndpoint: formFields.llmEndpoint.value.trim(),
       llmApiKey: formFields.llmApiKey.value.trim(),
       llmModel: formFields.llmModel.value.trim() || 'gpt-3.5-turbo',
+      // Chat feature settings
+      enableChat: enableChat.checked,
+      chatBackendUrl: chatBackendUrl.value.trim(),
+      allowCurrentArticleChat: allowCurrentArticleChat.checked,
+      allowKnowledgeBaseChat: allowKnowledgeBaseChat.checked,
       serviceNow: {
         ...existingSn,
         enabled: snEnabled.checked,
@@ -270,6 +344,10 @@ async function handleResetToDefaults() {
       llmApiKey: '',
       llmModel: 'gpt-3.5-turbo',
       enablePageScanning: false,
+      enableChat: false,
+      chatBackendUrl: '',
+      allowCurrentArticleChat: true,
+      allowKnowledgeBaseChat: true,
       serviceNow: typeof defaultServiceNowSettings === 'function'
         ? defaultServiceNowSettings()
         : {}
@@ -331,6 +409,11 @@ function validateFormats(settings) {
   // Only validate ServiceNow Base URL format if provided
   if (settings.serviceNow && settings.serviceNow.baseUrl && !isValidUrl(settings.serviceNow.baseUrl)) {
     return 'Invalid ServiceNow Base URL format';
+  }
+
+  // Only validate Chat backend URL format if provided
+  if (settings.chatBackendUrl && !isValidUrl(settings.chatBackendUrl)) {
+    return 'Invalid Chat backend URL format';
   }
   
   return null; // No validation errors

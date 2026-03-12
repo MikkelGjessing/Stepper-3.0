@@ -156,7 +156,12 @@ const Storage = {
       llmApiKey: '',
       llmModel: 'gpt-3.5-turbo',
       enablePageScanning: false,
-      serviceNow: defaultServiceNowSettings()
+      serviceNow: defaultServiceNowSettings(),
+      // Chat feature settings (see src/shared/types.js ChatSettings typedef)
+      enableChat: false,
+      chatBackendUrl: '',
+      allowCurrentArticleChat: true,
+      allowKnowledgeBaseChat: true
     };
     try {
       const { settings } = await chrome.storage.local.get('settings');

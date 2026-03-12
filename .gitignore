@@ -25,6 +25,9 @@ node_modules/
 package-lock.json
 yarn.lock
 
+# Backend secrets — never commit a populated .env file
+backend/.env
+
 # OS generated files
 Thumbs.db
 Desktop.ini

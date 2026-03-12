@@ -22,6 +22,14 @@ let currentSettings = null;
 let articleCompletionStates = {}; // { articleId: { completedStepIndexes: [], completedAt?: string } }
 let hasSearched = false; // Track if user has performed a search
 
+// ── Chat state ────────────────────────────────────────────────────────────────
+/** Currently active top-level tab: 'guides' | 'chat' */
+let activeTab = 'guides';
+/** Currently selected chat mode: 'kb' | 'current_article' */
+let chatMode = 'kb';
+/** Whether a chat request is in-flight */
+let chatLoading = false;
+
 // DOM Elements
 const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
@@ -37,6 +45,19 @@ const searchView = document.getElementById('searchView');
 const articleView = document.getElementById('articleView');
 const fullArticleView = document.getElementById('fullArticleView');
 const completeView = document.getElementById('completeView');
+
+// Chat DOM elements
+const tabSwitcher = document.getElementById('tabSwitcher');
+const tabGuides = document.getElementById('tabGuides');
+const tabChatBtn = document.getElementById('tabChat');
+const guidesTab = document.getElementById('guidesTab');
+const chatTab = document.getElementById('chatTab');
+const chatModeBar = document.getElementById('chatModeBar');
+const chatModeKBBtn = document.getElementById('chatModeKB');
+const chatModeArticleBtn = document.getElementById('chatModeArticle');
+const chatMessages = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const chatSendBtn = document.getElementById('chatSendBtn');
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -59,6 +80,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Subscribe to storage changes
   setupStorageListener();
+
+  // Apply chat visibility based on settings
+  applyChatSettings(currentSettings);
 });
 
 // Setup event listeners
@@ -78,6 +102,35 @@ function setupEventListeners() {
     await loadArticles();
     showNotification('Articles refreshed');
   });
+
+  // Tab switcher
+  if (tabGuides) {
+    tabGuides.addEventListener('click', () => switchTab('guides'));
+  }
+  if (tabChatBtn) {
+    tabChatBtn.addEventListener('click', () => switchTab('chat'));
+  }
+
+  // Chat mode toggle
+  if (chatModeKBBtn) {
+    chatModeKBBtn.addEventListener('click', () => setChatMode('kb'));
+  }
+  if (chatModeArticleBtn) {
+    chatModeArticleBtn.addEventListener('click', () => setChatMode('current_article'));
+  }
+
+  // Chat send
+  if (chatSendBtn) {
+    chatSendBtn.addEventListener('click', handleChatSend);
+  }
+  if (chatInput) {
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleChatSend();
+      }
+    });
+  }
 
   // Keyboard navigation for ARTICLE mode
   document.addEventListener('keydown', (e) => {
@@ -144,6 +197,8 @@ function setView(state) {
       currentStepIndex = 0;
       // Show/hide welcome message based on hasSearched
       updateSearchViewVisibility();
+      // Update chat mode bar (no article open)
+      updateChatModeBar();
       break;
       
     case UI_STATE.ARTICLE:
@@ -255,6 +310,7 @@ function setupStorageListener() {
       console.log('Settings changed, refreshing articles');
       currentSettings = await Storage.getSettings();
       await loadArticles();
+      applyChatSettings(currentSettings);
     }
     
     // React to articles changes
@@ -264,6 +320,246 @@ function setupStorageListener() {
     }
   });
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// Chat feature – "Ask Stepper"
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Show or hide the tab switcher and chat tab based on current settings.
+ * @param {Object} settings
+ */
+function applyChatSettings(settings) {
+  if (!settings) return;
+  const enabled = settings.enableChat === true;
+  if (tabSwitcher) {
+    tabSwitcher.style.display = enabled ? 'flex' : 'none';
+  }
+  // If chat is disabled while user is on chat tab, switch back to guides
+  if (!enabled && activeTab === 'chat') {
+    switchTab('guides');
+  }
+  // Update mode bar buttons based on per-mode permissions
+  if (chatModeKBBtn) {
+    chatModeKBBtn.style.display = settings.allowKnowledgeBaseChat === false ? 'none' : '';
+  }
+  if (chatModeArticleBtn) {
+    chatModeArticleBtn.style.display = settings.allowCurrentArticleChat === false ? 'none' : '';
+  }
+}
+
+/**
+ * Switch the top-level tab.
+ * @param {'guides'|'chat'} tab
+ */
+function switchTab(tab) {
+  activeTab = tab;
+  const isGuides = tab === 'guides';
+
+  if (guidesTab) guidesTab.style.display = isGuides ? 'flex' : 'none';
+  if (chatTab) chatTab.style.display = isGuides ? 'none' : 'flex';
+
+  if (tabGuides) tabGuides.classList.toggle('tab-btn-active', isGuides);
+  if (tabChatBtn) tabChatBtn.classList.toggle('tab-btn-active', !isGuides);
+
+  // Reflect whether we're inside an article in the mode bar
+  if (!isGuides) {
+    updateChatModeBar();
+  }
+}
+
+/**
+ * Show/hide the article-mode toggle in the chat tab based on whether an
+ * article is currently open.
+ */
+function updateChatModeBar() {
+  const hasArticle = currentSelectedArticle !== null;
+  const allowArticleMode = currentSettings && currentSettings.allowCurrentArticleChat !== false;
+  if (chatModeBar) {
+    chatModeBar.style.display = (hasArticle && allowArticleMode) ? 'flex' : 'none';
+  }
+  // If article closed but mode was current_article, fall back to kb
+  if (!hasArticle && chatMode === 'current_article') {
+    setChatMode('kb');
+  }
+}
+
+/**
+ * Switch chat retrieval mode.
+ * @param {'kb'|'current_article'} mode
+ */
+function setChatMode(mode) {
+  chatMode = mode;
+  if (chatModeKBBtn) chatModeKBBtn.classList.toggle('chat-mode-btn-active', mode === 'kb');
+  if (chatModeArticleBtn) chatModeArticleBtn.classList.toggle('chat-mode-btn-active', mode === 'current_article');
+}
+
+/**
+ * Handle the send button / Enter key in the chat input.
+ */
+async function handleChatSend() {
+  if (chatLoading) return;
+
+  const message = (chatInput ? chatInput.value : '').trim();
+  if (!message) return;
+
+  // Clear input
+  if (chatInput) chatInput.value = '';
+
+  // Append user message bubble
+  appendChatMessage('user', message);
+
+  // Show loading indicator
+  chatLoading = true;
+  const loadingEl = appendChatLoading();
+  if (chatSendBtn) chatSendBtn.disabled = true;
+
+  try {
+    // Build params
+    const params = {
+      message,
+      mode: chatMode,
+      settings: currentSettings
+    };
+
+    if (chatMode === 'current_article' && currentSelectedArticle) {
+      params.currentArticleId = currentSelectedArticle.id;
+      // Provide plain-text article content for backend context
+      params.currentArticleContent = buildArticlePlainText(currentSelectedArticle);
+    }
+
+    const response = await Chat.sendMessage(params);
+    loadingEl.remove();
+    appendChatResponse(response);
+  } catch (err) {
+    loadingEl.remove();
+    // Limit displayed error to a safe maximum length to avoid rendering large server payloads
+    const rawMsg = (err && err.message) ? err.message : 'Something went wrong. Please try again.';
+    const safeMsg = rawMsg.length > 200 ? rawMsg.slice(0, 200) + '…' : rawMsg;
+    appendChatMessage('error', '⚠️ ' + safeMsg);
+  } finally {
+    chatLoading = false;
+    if (chatSendBtn) chatSendBtn.disabled = false;
+    if (chatInput) chatInput.focus();
+  }
+}
+
+/**
+ * Build a plain-text representation of an article for the backend context.
+ * @param {Object} article
+ * @returns {string}
+ */
+function buildArticlePlainText(article) {
+  const parts = [];
+  if (article.title) parts.push(article.title);
+  if (article.summary) parts.push(article.summary);
+  if (Array.isArray(article.steps)) {
+    article.steps.forEach((step, i) => {
+      const num = step.displayNumber || (i + 1);
+      if (step.title) parts.push(`Step ${num}: ${step.title}`);
+      if (step.bodyHtml) {
+        // Strip tags for plain text
+        const div = document.createElement('div');
+        div.innerHTML = step.bodyHtml;
+        const text = (div.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text) parts.push(text);
+      }
+    });
+  }
+  return parts.join('\n\n');
+}
+
+/**
+ * Append a plain text bubble to the chat log.
+ * @param {'user'|'assistant'|'error'} role
+ * @param {string} text
+ * @returns {HTMLElement}
+ */
+function appendChatMessage(role, text) {
+  const bubble = document.createElement('div');
+  bubble.className = `chat-bubble chat-bubble-${role}`;
+  bubble.textContent = text;
+  chatMessages.appendChild(bubble);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  return bubble;
+}
+
+/**
+ * Append a loading spinner placeholder.
+ * @returns {HTMLElement}
+ */
+function appendChatLoading() {
+  const el = document.createElement('div');
+  el.className = 'chat-bubble chat-bubble-assistant chat-loading';
+  el.innerHTML = '<span class="chat-dots"><span>.</span><span>.</span><span>.</span></span>';
+  chatMessages.appendChild(el);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  return el;
+}
+
+/**
+ * Append a full assistant response with sources and suggested actions.
+ * @param {Object} response - ChatResponse shape
+ */
+function appendChatResponse(response) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'chat-response';
+
+  // Answer text
+  const answerEl = document.createElement('div');
+  answerEl.className = 'chat-bubble chat-bubble-assistant';
+  answerEl.textContent = response.answer || '(No answer returned)';
+  wrapper.appendChild(answerEl);
+
+  // Sources
+  if (Array.isArray(response.sources) && response.sources.length > 0) {
+    const sourcesEl = document.createElement('div');
+    sourcesEl.className = 'chat-sources';
+    sourcesEl.innerHTML = '<div class="chat-sources-label">Sources</div>';
+    response.sources.forEach(src => {
+      const srcEl = document.createElement('div');
+      srcEl.className = 'chat-source-item';
+      srcEl.innerHTML = `<span class="chat-source-title">${escapeHtml(src.title || src.articleId)}</span>`;
+      if (src.snippet) {
+        const snipEl = document.createElement('div');
+        snipEl.className = 'chat-source-snippet';
+        snipEl.textContent = src.snippet.length > 120
+          ? src.snippet.slice(0, 120) + '…'
+          : src.snippet;
+        srcEl.appendChild(snipEl);
+      }
+      sourcesEl.appendChild(srcEl);
+    });
+    wrapper.appendChild(sourcesEl);
+  }
+
+  // Suggested actions
+  if (Array.isArray(response.suggestedActions) && response.suggestedActions.length > 0) {
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'chat-actions';
+    response.suggestedActions.forEach(action => {
+      const btn = document.createElement('button');
+      btn.className = 'chat-action-btn';
+      btn.textContent = action.label || 'Open article';
+      if (action.type === 'open_article' && action.articleId) {
+        btn.addEventListener('click', () => {
+          // Switch to guides tab and open the article
+          switchTab('guides');
+          displayArticle(action.articleId);
+        });
+      }
+      actionsEl.appendChild(btn);
+    });
+    wrapper.appendChild(actionsEl);
+  }
+
+  chatMessages.appendChild(wrapper);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// End chat feature
+// ════════════════════════════════════════════════════════════════════════════
 
 // Load articles from storage
 async function loadArticles() {
@@ -377,6 +673,9 @@ async function displayArticle(articleId) {
   
   currentSelectedArticle = article;
   currentStepIndex = 0; // Start at first step
+
+  // Refresh chat mode bar now that an article is open
+  updateChatModeBar();
   
   // Check if article has steps
   const steps = article.steps && Array.isArray(article.steps) && article.steps.length > 0 
