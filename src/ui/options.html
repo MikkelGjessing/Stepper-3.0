@@ -185,6 +185,55 @@
           </div>
         </section>
 
+        <!-- Ask Stepper Chat Section -->
+        <section class="settings-section">
+          <h2 class="section-title">💬 Ask Stepper Chat</h2>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="enableChat" class="checkbox">
+              <span>Enable Ask Stepper chat</span>
+            </label>
+            <span class="help-text">Show the "Ask Stepper" tab in the side panel. Requires a backend service URL below.</span>
+          </div>
+
+          <div id="chatFields">
+            <div class="form-group">
+              <label class="label" for="chatBackendUrl">Chat backend URL</label>
+              <input
+                type="url"
+                id="chatBackendUrl"
+                class="input"
+                placeholder="http://localhost:3001"
+              />
+              <span class="help-text">Base URL of the Ask Stepper backend service (e.g. <code>http://localhost:3001</code>). The extension will call <code>/chat</code> and <code>/health</code> on this URL.</span>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="allowCurrentArticleChat" class="checkbox">
+                <span>Allow "Ask about current article" mode</span>
+              </label>
+              <span class="help-text">Let users ask questions about the article they currently have open.</span>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="allowKnowledgeBaseChat" class="checkbox">
+                <span>Allow "Ask the knowledge base" mode</span>
+              </label>
+              <span class="help-text">Let users search the full knowledge base through the chat interface.</span>
+            </div>
+
+            <div class="button-group">
+              <button type="button" class="btn btn-secondary" id="chatTestBtn">
+                🔌 Test connection
+              </button>
+            </div>
+            <div id="chatStatus" style="margin-top: 10px;"></div>
+          </div>
+        </section>
+
         <!-- LLM Configuration Section -->
         <section class="settings-section" id="llmSection" style="display: none;">
           <h2 class="section-title">🤖 LLM Configuration</h2>

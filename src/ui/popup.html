@@ -23,62 +23,110 @@
       </div>
     </noscript>
 
-    <!-- Search View -->
-    <div id="searchView" class="view-container">
-      <!-- Search Input -->
-      <div class="search-section">
-        <div class="search-container">
-          <input 
-            type="text" 
-            id="searchInput" 
-            class="search-input" 
-            placeholder="Ask me anything or search for guides..."
-            autocomplete="off"
-          />
-          <button class="search-btn" id="searchBtn">🔍</button>
+    <!-- Tab switcher (Guides / Ask Stepper) — shown/hidden by JS based on chat setting -->
+    <div class="tab-switcher" id="tabSwitcher" style="display: none;">
+      <button class="tab-btn tab-btn-active" id="tabGuides" data-tab="guides">📚 Guides</button>
+      <button class="tab-btn" id="tabChat" data-tab="chat">💬 Ask Stepper</button>
+    </div>
+
+    <!-- ═══════════════ GUIDES TAB ═══════════════ -->
+    <div id="guidesTab" class="tab-panel">
+
+      <!-- Search View -->
+      <div id="searchView" class="view-container">
+        <!-- Search Input -->
+        <div class="search-section">
+          <div class="search-container">
+            <input 
+              type="text" 
+              id="searchInput" 
+              class="search-input" 
+              placeholder="Ask me anything or search for guides..."
+              autocomplete="off"
+            />
+            <button class="search-btn" id="searchBtn">🔍</button>
+          </div>
+        </div>
+
+        <!-- Welcome Message (shown before first search) -->
+        <div id="welcomeMessage" class="welcome-message">
+          <p>👋 Welcome to Stepper 3.0!</p>
+          <p>Search for step-by-step guides to get started.</p>
+        </div>
+
+        <!-- Results List (shown after search) -->
+        <div class="results-content" id="resultsContent" style="display: none;">
+          <div class="panel-header">
+            <h2>Search Results</h2>
+            <span class="result-count" id="resultCount">0 articles</span>
+          </div>
+          <div class="results-list" id="resultsList">
+          </div>
         </div>
       </div>
 
-      <!-- Welcome Message (shown before first search) -->
-      <div id="welcomeMessage" class="welcome-message">
-        <p>👋 Welcome to Stepper 3.0!</p>
-        <p>Search for step-by-step guides to get started.</p>
-      </div>
-
-      <!-- Results List (shown after search) -->
-      <div class="results-content" id="resultsContent" style="display: none;">
-        <div class="panel-header">
-          <h2>Search Results</h2>
-          <span class="result-count" id="resultCount">0 articles</span>
-        </div>
-        <div class="results-list" id="resultsList">
+      <!-- Article View (Step-by-step mode) -->
+      <div id="articleView" class="view-container" style="display: none;">
+        <div id="articleHeader" class="article-step-header"></div>
+        <div id="articleContentScrollable" class="article-step-content"></div>
+        <div id="articleFooter" class="article-step-footer">
+          <div id="articleNavContainer"></div>
+          <div id="stepCounter" class="step-counter-label"></div>
         </div>
       </div>
-    </div>
 
-    <!-- Article View (Step-by-step mode) -->
-    <div id="articleView" class="view-container" style="display: none;">
-      <div id="articleHeader" class="article-step-header"></div>
-      <div id="articleContentScrollable" class="article-step-content"></div>
-      <div id="articleFooter" class="article-step-footer">
-        <div id="articleNavContainer"></div>
-        <div id="stepCounter" class="step-counter-label"></div>
+      <!-- Full Article View -->
+      <div id="fullArticleView" class="view-container" style="display: none;">
+        <div class="full-article-content-scrollable" id="fullArticleContentScrollable">
+          <!-- Full article content will be dynamically inserted here -->
+        </div>
       </div>
-    </div>
 
-    <!-- Full Article View -->
-    <div id="fullArticleView" class="view-container" style="display: none;">
-      <div class="full-article-content-scrollable" id="fullArticleContentScrollable">
-        <!-- Full article content will be dynamically inserted here -->
+      <!-- Complete View (Completion Summary) -->
+      <div id="completeView" class="view-container" style="display: none;">
+        <div class="complete-content-scrollable" id="completeContentScrollable">
+          <!-- Completion summary will be dynamically inserted here -->
+        </div>
       </div>
-    </div>
 
-    <!-- Complete View (Completion Summary) -->
-    <div id="completeView" class="view-container" style="display: none;">
-      <div class="complete-content-scrollable" id="completeContentScrollable">
-        <!-- Completion summary will be dynamically inserted here -->
+    </div><!-- /guidesTab -->
+
+    <!-- ═══════════════ CHAT TAB ═══════════════ -->
+    <div id="chatTab" class="tab-panel" style="display: none;">
+
+      <!-- Mode toggle: shown only when an article is open -->
+      <div class="chat-mode-bar" id="chatModeBar" style="display: none;">
+        <button class="chat-mode-btn chat-mode-btn-active" id="chatModeKB" data-mode="kb">
+          🔍 Ask the knowledge base
+        </button>
+        <button class="chat-mode-btn" id="chatModeArticle" data-mode="current_article">
+          📄 Ask about current article
+        </button>
       </div>
-    </div>
+
+      <!-- Message list -->
+      <div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-label="Chat messages">
+        <div class="chat-welcome">
+          <p>👋 Hi! I'm <strong>Ask Stepper</strong>.</p>
+          <p>Ask me anything about the knowledge base, or open an article and switch to "Ask about current article" for context-aware help.</p>
+        </div>
+      </div>
+
+      <!-- Input area -->
+      <div class="chat-input-area">
+        <textarea
+          id="chatInput"
+          class="chat-input"
+          placeholder="Ask a question…"
+          rows="2"
+          autocomplete="off"
+        ></textarea>
+        <button class="chat-send-btn" id="chatSendBtn" title="Send">
+          ➤
+        </button>
+      </div>
+
+    </div><!-- /chatTab -->
 
     <!-- Footer (Sticky) -->
     <footer class="footer">
@@ -87,12 +135,14 @@
   </div>
 
   <!-- Scripts -->
+  <script src="../shared/types.js"></script>
   <script src="../lib/storage.js"></script>
   <script src="../lib/normalizer.js"></script>
   <script src="../lib/articles.js"></script>
   <script src="../lib/parser_strategies.js"></script>
   <script src="../lib/ingestion.js"></script>
   <script src="../lib/search.js"></script>
+  <script src="../lib/chat.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
