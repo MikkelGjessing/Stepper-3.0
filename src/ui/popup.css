@@ -7,6 +7,8 @@
 
 html {
   overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 
 img {
@@ -19,16 +21,20 @@ body {
   font-size: 14px;
   color: #333;
   background: var(--nexi-grey);
-  overflow: hidden;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 
 .container {
   display: flex;
   flex-direction: column;
-  width: clamp(320px, 16.7vw, 420px); /* ~1/6 of 1920px screen width = 320px for side panel */
+  width: 100%;
+  max-width: 100%;
   height: 100vh;
   background: white;
   position: relative;
+  overflow-x: hidden;
 }
 
 /* Header - Sticky at top */
@@ -177,6 +183,9 @@ body {
   font-size: 14px;
   margin-bottom: 4px;
   color: #333;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .result-item-meta {
@@ -192,6 +201,7 @@ body {
 
 .result-item-info {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   font-size: 11px;
   color: var(--nexi-blue);
@@ -294,6 +304,9 @@ body {
   font-weight: 600;
   color: #333;
   margin: 0 0 8px 0;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .step-progress-info {
@@ -433,6 +446,9 @@ body {
   font-weight: 600;
   color: #333;
   margin-bottom: 8px;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .full-article-summary {
@@ -443,6 +459,7 @@ body {
 
 .full-article-navigation {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 24px;
   padding-bottom: 16px;
@@ -467,6 +484,9 @@ body {
   font-weight: 600;
   color: #333;
   margin-bottom: 8px;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .article-completed-banner {
@@ -490,6 +510,7 @@ body {
 
 .article-navigation {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 24px;
   padding-bottom: 16px;
@@ -567,12 +588,18 @@ body {
   font-weight: 600;
   color: #333;
   margin: 0;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .full-article-step-body {
   margin-left: 44px;
+  max-width: calc(100% - 44px);
   line-height: 1.8;
   color: #333;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .full-article-step-body p {
@@ -594,6 +621,7 @@ body {
 /* Article Meta and Content */
 .article-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 16px;
   padding-bottom: 16px;
@@ -817,6 +845,9 @@ body {
   font-weight: 600;
   color: #333;
   margin: 0;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .step-completed-badge {
@@ -981,6 +1012,7 @@ body {
 
 .completion-stats {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 32px;
   margin: 32px 0;
@@ -1124,6 +1156,7 @@ body {
 
 .completion-metrics {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   justify-content: center;
   margin-bottom: 20px;
@@ -1482,9 +1515,9 @@ body {
 .chat-context-label {
   font-size: 11px;
   color: var(--nexi-blue);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .chat-drawer-header-right {
@@ -1672,4 +1705,64 @@ body {
 .chat-send-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ── Responsive Breakpoints (layout-only, no font scaling) ── */
+
+/* Under 340px: stack nav/action button groups vertically */
+@media (max-width: 340px) {
+  .step-nav-row {
+    flex-direction: column;
+  }
+
+  .step-action-row {
+    flex-direction: column;
+  }
+
+  .step-navigation {
+    flex-direction: column;
+  }
+
+  .completion-actions {
+    flex-direction: column;
+  }
+
+  .full-article-step-body {
+    margin-left: 0;
+    max-width: 100%;
+  }
+}
+
+/* Above 420px: allow slightly larger content padding */
+@media (min-width: 420px) {
+  .search-section {
+    padding: 18px 24px;
+  }
+
+  .article-step-content {
+    padding: 18px 24px;
+  }
+
+  .full-article-content-scrollable {
+    padding: 24px;
+  }
+
+  .complete-content-scrollable {
+    padding: 24px;
+  }
+}
+
+/* Above 500px: allow wider card spacing */
+@media (min-width: 500px) {
+  .results-list {
+    padding: 12px;
+  }
+
+  .result-item {
+    padding: 16px;
+  }
+
+  .full-article-step {
+    padding: 24px;
+  }
 }
