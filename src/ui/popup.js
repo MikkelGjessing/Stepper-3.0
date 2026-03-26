@@ -11,8 +11,19 @@ const UI_STATE = {
   COMPLETE: 'complete'
 };
 
+// Case State Machine
+const CASE_STATE = {
+  NOT_STARTED: 'not_started',
+  ACTIVE: 'active'
+};
+
 let currentUIState = UI_STATE.SEARCH;
 let currentStepIndex = 0; // Track current step in step-by-step mode
+
+// Case state
+let caseState = CASE_STATE.NOT_STARTED;
+let activeCase = null; // { startedAt, completedInstructions: [{articleId, articleTitle, completedAt, order}] }
+let caseStartText = ''; // Loaded from config/case_start_text.md
 
 // State management
 let currentArticles = [];
@@ -37,6 +48,11 @@ const searchView = document.getElementById('searchView');
 const articleView = document.getElementById('articleView');
 const fullArticleView = document.getElementById('fullArticleView');
 const completeView = document.getElementById('completeView');
+const caseNotStartedView = document.getElementById('caseNotStartedView');
+
+// Case Active DOM elements (inside searchView)
+const caseActiveOverview = document.getElementById('caseActiveOverview');
+const completedInstructionsList = document.getElementById('completedInstructionsList');
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -47,6 +63,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Load completion states
   await loadCompletionStates();
+
+  // Load case state and config text
+  await loadCaseState();
+  await loadCaseStartText();
   
   // Load dummy articles if needed
   await Articles.loadDummyArticlesIfNeeded();
@@ -62,6 +82,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialise the chat drawer (requires settings to be loaded)
   initChatDrawer();
+
+  // Show appropriate view based on case state
+  applyCaseState();
 });
 
 // Setup event listeners
@@ -76,6 +99,25 @@ function setupEventListeners() {
   settingsBtn.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
   });
+
+  // Case workflow event listeners
+  const startCaseBtn = document.getElementById('startCaseBtn');
+  if (startCaseBtn) startCaseBtn.addEventListener('click', handleStartCase);
+
+  const caseStartCancelBtn = document.getElementById('caseStartCancelBtn');
+  if (caseStartCancelBtn) caseStartCancelBtn.addEventListener('click', handleCancelStartCase);
+
+  const caseStartConfirmBtn = document.getElementById('caseStartConfirmBtn');
+  if (caseStartConfirmBtn) caseStartConfirmBtn.addEventListener('click', handleConfirmStartCase);
+
+  const concludeCaseBtn = document.getElementById('concludeCaseBtn');
+  if (concludeCaseBtn) concludeCaseBtn.addEventListener('click', handleConcludeCase);
+
+  const caseCopySummaryBtn = document.getElementById('caseCopySummaryBtn');
+  if (caseCopySummaryBtn) caseCopySummaryBtn.addEventListener('click', handleCopyCaseSummary);
+
+  const caseConcludeCloseBtn = document.getElementById('caseConcludeCloseBtn');
+  if (caseConcludeCloseBtn) caseConcludeCloseBtn.addEventListener('click', handleCloseConcludeCase);
 
   // Keyboard navigation for ARTICLE mode
   document.addEventListener('keydown', (e) => {
@@ -120,6 +162,276 @@ function updateSearchViewVisibility() {
   }
 }
 
+// ═══════════════════════════════════════════════════
+// CASE WORKFLOW
+// ═══════════════════════════════════════════════════
+
+/**
+ * Load case state from chrome.storage.local
+ */
+async function loadCaseState() {
+  try {
+    const result = await chrome.storage.local.get('activeCase');
+    if (result.activeCase) {
+      activeCase = result.activeCase;
+      caseState = CASE_STATE.ACTIVE;
+    } else {
+      activeCase = null;
+      caseState = CASE_STATE.NOT_STARTED;
+    }
+  } catch (error) {
+    console.error('Error loading case state:', error);
+    activeCase = null;
+    caseState = CASE_STATE.NOT_STARTED;
+  }
+}
+
+/**
+ * Save current case state to chrome.storage.local
+ */
+async function saveCaseState() {
+  try {
+    if (activeCase) {
+      await chrome.storage.local.set({ activeCase });
+    } else {
+      await chrome.storage.local.remove('activeCase');
+    }
+  } catch (error) {
+    console.error('Error saving case state:', error);
+  }
+}
+
+/**
+ * Load the configurable case-start text from config/case_start_text.md
+ */
+async function loadCaseStartText() {
+  try {
+    const url = chrome.runtime.getURL('config/case_start_text.md');
+    const response = await fetch(url);
+    if (response.ok) {
+      const text = await response.text();
+      caseStartText = text.trim();
+    }
+  } catch (error) {
+    console.error('Error loading case start text:', error);
+    caseStartText = 'Please confirm you are ready to begin the case.';
+  }
+}
+
+/**
+ * Convert a simple markdown string to safe HTML.
+ * Supports: paragraphs, unordered lists (- or *), basic bold/italic.
+ * @param {string} md
+ * @returns {string} HTML string
+ */
+function simpleMarkdownToHtml(md) {
+  if (!md) return '';
+  const lines = md.split('\n');
+  const parts = [];
+  let inList = false;
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const listMatch = line.match(/^[-*]\s+(.*)/);
+    if (listMatch) {
+      if (!inList) { parts.push('<ul>'); inList = true; }
+      parts.push('<li>' + escapeHtmlInline(listMatch[1]) + '</li>');
+    } else {
+      if (inList) { parts.push('</ul>'); inList = false; }
+      if (line.trim() === '') {
+        // blank line separates paragraphs – no extra element needed
+      } else {
+        parts.push('<p>' + escapeHtmlInline(line.trim()) + '</p>');
+      }
+    }
+  }
+  if (inList) parts.push('</ul>');
+  return parts.join('');
+}
+
+/**
+ * Escape HTML in inline text while preserving simple **bold** and *italic* markdown.
+ */
+function escapeHtmlInline(text) {
+  const escaped = escapeHtml(text);
+  return escaped
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+}
+
+/**
+ * Apply the current case state to the UI.
+ * Shows the correct top-level view.
+ */
+function applyCaseState() {
+  if (caseState === CASE_STATE.NOT_STARTED) {
+    // Hide search view, show case-not-started view
+    if (searchView) searchView.style.display = 'none';
+    if (articleView) articleView.style.display = 'none';
+    if (fullArticleView) fullArticleView.style.display = 'none';
+    if (completeView) completeView.style.display = 'none';
+    if (caseNotStartedView) caseNotStartedView.style.display = 'flex';
+    if (caseActiveOverview) caseActiveOverview.style.display = 'none';
+  } else if (caseState === CASE_STATE.ACTIVE) {
+    // Hide case-not-started, show search view
+    if (caseNotStartedView) caseNotStartedView.style.display = 'none';
+    setView(UI_STATE.SEARCH);
+    renderCaseActiveOverview();
+    if (caseActiveOverview) caseActiveOverview.style.display = 'flex';
+  }
+}
+
+/**
+ * Render the completed instructions list inside the case active overview.
+ */
+function renderCaseActiveOverview() {
+  if (!completedInstructionsList || !activeCase) return;
+
+  const instructions = activeCase.completedInstructions || [];
+  if (instructions.length === 0) {
+    completedInstructionsList.innerHTML = '<p class="case-empty-state">No completed instructions yet.</p>';
+    return;
+  }
+
+  const sorted = [...instructions].sort((a, b) => a.order - b.order);
+  completedInstructionsList.innerHTML = sorted.map(item => `
+    <div class="completed-instruction-card">
+      <span class="completed-instruction-order">${item.order}</span>
+      <span class="completed-instruction-title">${escapeHtml(item.articleTitle || 'Untitled')}</span>
+    </div>
+  `).join('');
+}
+
+/**
+ * Handle "Start case" button click – show the start-case modal.
+ */
+function handleStartCase() {
+  const modal = document.getElementById('caseStartModal');
+  const body = document.getElementById('caseStartModalBody');
+  if (!modal || !body) return;
+
+  body.innerHTML = simpleMarkdownToHtml(caseStartText);
+  modal.style.display = 'flex';
+}
+
+/**
+ * Handle Cancel in the start-case modal.
+ */
+function handleCancelStartCase() {
+  const modal = document.getElementById('caseStartModal');
+  if (modal) modal.style.display = 'none';
+}
+
+/**
+ * Handle Confirm in the start-case modal – activate the case.
+ */
+async function handleConfirmStartCase() {
+  const modal = document.getElementById('caseStartModal');
+  if (modal) modal.style.display = 'none';
+
+  activeCase = {
+    startedAt: new Date().toISOString(),
+    completedInstructions: []
+  };
+  caseState = CASE_STATE.ACTIVE;
+  await saveCaseState();
+
+  applyCaseState();
+  if (searchInput) searchInput.focus();
+}
+
+/**
+ * Handle "Conclude case" button – show the conclusion modal with the summary.
+ */
+function handleConcludeCase() {
+  const modal = document.getElementById('caseConcludeModal');
+  const body = document.getElementById('caseConcludeModalBody');
+  if (!modal || !body) return;
+
+  const instructions = (activeCase && activeCase.completedInstructions) ? activeCase.completedInstructions : [];
+  const summaryText = generateCaseSummary(instructions);
+
+  body.innerHTML = `
+    <div class="conclude-instructions-list">
+      ${instructions.length === 0
+        ? '<p class="case-empty-state">No instructions were completed during this case.</p>'
+        : [...instructions].sort((a, b) => a.order - b.order).map(item => `
+            <div class="concluded-instruction-item">
+              <span class="concluded-instruction-order">${item.order}.</span>
+              <span class="concluded-instruction-title">${escapeHtml(item.articleTitle || 'Untitled')}</span>
+            </div>`).join('')
+      }
+    </div>
+    <div class="conclude-summary-block">
+      <label class="conclude-summary-label">CRM log text</label>
+      <pre class="conclude-summary-text" id="caseSummaryText">${escapeHtml(summaryText)}</pre>
+    </div>
+  `;
+
+  // Store summary text for copy
+  modal.dataset.summaryText = summaryText;
+  modal.style.display = 'flex';
+}
+
+/**
+ * Handle copying the CRM summary text to clipboard.
+ */
+async function handleCopyCaseSummary() {
+  const modal = document.getElementById('caseConcludeModal');
+  const summaryText = modal ? modal.dataset.summaryText : '';
+  if (!summaryText) return;
+
+  try {
+    await navigator.clipboard.writeText(summaryText);
+    const btn = document.getElementById('caseCopySummaryBtn');
+    if (btn) {
+      const original = btn.textContent;
+      btn.textContent = '✅ Copied!';
+      setTimeout(() => { btn.textContent = original; }, 2000);
+    }
+  } catch (err) {
+    console.error('Failed to copy summary:', err);
+  }
+}
+
+/**
+ * Handle "Close case" in the conclude modal – reset state and return to NOT_STARTED.
+ */
+async function handleCloseConcludeCase() {
+  const modal = document.getElementById('caseConcludeModal');
+  if (modal) modal.style.display = 'none';
+
+  // Clear case state
+  activeCase = null;
+  caseState = CASE_STATE.NOT_STARTED;
+  await saveCaseState();
+
+  // Reset search state so the next case starts fresh
+  hasSearched = false;
+  currentSelectedArticle = null;
+  currentStepIndex = 0;
+
+  applyCaseState();
+}
+
+/**
+ * Add a completed instruction to the active case record.
+ * @param {string} articleId
+ * @param {string} articleTitle
+ */
+async function addCompletedInstructionToCase(articleId, articleTitle) {
+  if (!activeCase || caseState !== CASE_STATE.ACTIVE) return;
+
+  const order = (activeCase.completedInstructions.length) + 1;
+  activeCase.completedInstructions.push({
+    articleId,
+    articleTitle: articleTitle || 'Untitled',
+    completedAt: new Date().toISOString(),
+    order
+  });
+  await saveCaseState();
+}
+
 /**
  * View State Machine - Controls which view is visible
  */
@@ -128,6 +440,7 @@ function setView(state) {
   currentUIState = state;
   
   // Hide all views
+  if (caseNotStartedView) caseNotStartedView.style.display = 'none';
   searchView.style.display = 'none';
   articleView.style.display = 'none';
   fullArticleView.style.display = 'none';
@@ -142,6 +455,10 @@ function setView(state) {
       currentStepIndex = 0;
       // Show/hide welcome message based on hasSearched
       updateSearchViewVisibility();
+      // Show case active overview if case is active
+      if (caseActiveOverview) {
+        caseActiveOverview.style.display = caseState === CASE_STATE.ACTIVE ? 'flex' : 'none';
+      }
       break;
       
     case UI_STATE.ARTICLE:
@@ -826,21 +1143,32 @@ async function handleStepContinue() {
 
 /**
  * Handle Complete Process button on the last step
- * Marks the last step as completed, sets completedAt timestamp, and shows completion summary
+ * Marks the last step as completed, sets completedAt timestamp.
+ * If a case is active, adds the instruction to the case record and returns to search view.
+ * Otherwise shows the article-level completion summary.
  */
 async function handleCompleteProcess() {
   if (!currentSelectedArticle) return;
   
   const article = currentSelectedArticle;
-  const totalSteps = article.steps.length;
   
   // Mark the last step as completed (if not already)
   await markStepCompleted(article.id, currentStepIndex);
   
   // Mark article as completed with timestamp
   await markArticleCompleted(article.id);
+
+  // If a case is active, record this instruction in the case and return to search
+  if (caseState === CASE_STATE.ACTIVE) {
+    await addCompletedInstructionToCase(article.id, article.title);
+    // Return to search/case view and refresh the completed instructions list
+    setView(UI_STATE.SEARCH);
+    renderCaseActiveOverview();
+    if (searchInput) searchInput.focus();
+    return;
+  }
   
-  // Transition to completion summary view
+  // No active case – show the article-level completion summary as before
   setView(UI_STATE.COMPLETE);
   renderCompleteView();
 }

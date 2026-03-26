@@ -1766,3 +1766,240 @@ body {
     padding: 24px;
   }
 }
+
+/* ═══════════════════════════════════════════════════
+   CASE WORKFLOW STYLES
+   ═══════════════════════════════════════════════════ */
+
+/* Case Not Started View */
+.case-not-started-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 40px 24px;
+  gap: 24px;
+  text-align: center;
+}
+
+.case-not-started-tagline {
+  font-size: 15px;
+  color: #666;
+}
+
+.case-start-btn {
+  font-size: 18px;
+  padding: 16px 40px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 24px;
+}
+
+.modal-panel {
+  background: white;
+  border-radius: 12px;
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.modal-panel-wide {
+  max-width: 480px;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0;
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #333;
+}
+
+.modal-body p {
+  margin-bottom: 10px;
+}
+
+.modal-body ul {
+  padding-left: 20px;
+  margin-bottom: 10px;
+}
+
+.modal-body li {
+  margin-bottom: 6px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.modal-actions .secondary-btn,
+.modal-actions .primary-btn {
+  padding: 10px 22px;
+  font-size: 14px;
+  border-radius: 8px;
+  min-width: 90px;
+}
+
+/* Case Active Overview (inside searchView) */
+.case-active-overview {
+  flex-direction: column;
+  border-top: 1px solid #e0e0e0;
+  padding: 12px 16px 16px;
+  gap: 10px;
+  background: #f8f9ff;
+}
+
+.case-overview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.case-overview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #444;
+  margin: 0;
+}
+
+.completed-instructions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.completed-instruction-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #e6f4ea;
+  border: 1px solid #b7dfbe;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #1e5c2f;
+}
+
+.completed-instruction-order {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 22px;
+  text-align: center;
+  background: #27ae60;
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.completed-instruction-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.case-empty-state {
+  font-size: 13px;
+  color: #999;
+  text-align: center;
+  padding: 8px 0;
+}
+
+.case-conclude-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.conclude-case-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+/* Case Conclude Modal */
+.conclude-instructions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.concluded-instruction-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #333;
+}
+
+.concluded-instruction-order {
+  font-weight: 700;
+  color: #27ae60;
+  min-width: 20px;
+}
+
+.concluded-instruction-title {
+  font-size: 14px;
+}
+
+.conclude-summary-block {
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.conclude-summary-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.conclude-summary-text {
+  font-family: var(--font-family, inherit);
+  font-size: 13px;
+  line-height: 1.6;
+  color: #333;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
